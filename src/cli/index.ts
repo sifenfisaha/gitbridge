@@ -39,8 +39,20 @@ import {
   handleIdeUnsyncCommand,
   handleIdeStatusCommand,
 } from "./commands/ide";
+import { handleSuggestCommand } from "./commands/suggest";
+import { promptAutoRun } from "./ui/prompts";
 import { configureProgramHelp } from "./ui/help";
-import { formatCommandError, formatOptionError, normalizeArgv, detectParentCommand, handleTooManyArguments } from "@/utils/similarity";
+import {
+  formatCommandError,
+  formatOptionError,
+  normalizeArgv,
+  detectParentCommand,
+  handleTooManyArguments,
+  getTopSuggestion,
+  getTopOptionSuggestion,
+  resolveCorrectedArgv,
+  formatArgvForDisplay,
+} from "@/utils/similarity";
 import { GITBRIDGE_VERSION } from "@/version";
 
 export function createProgram(name = "gitbridge"): Command {
@@ -49,21 +61,118 @@ export function createProgram(name = "gitbridge"): Command {
   program
     .name(name)
     .description("Universal Git Identity & Multi-Account Management Layer")
-    .version(GITBRIDGE_VERSION);
+    .version(GITBRIDGE_VERSION)
+    .option("--no-prompt", "Disable interactive confirmation prompts on typos");
 
   program.showSuggestionAfterError(false);
+
+  let activeArgv: string[] = process.argv;
 
   // Override parse and parseAsync to normalize -help to --help
   const originalParse = program.parse.bind(program);
   program.parse = ((argv?: readonly string[], parseOptions?: any) => {
-    const args = argv || process.argv;
-    return originalParse(normalizeArgv([...args]), parseOptions);
+    const rawArgs = argv || process.argv;
+    activeArgv = normalizeArgv([...rawArgs]);
+    return originalParse(activeArgv, parseOptions);
   }) as any;
 
   const originalParseAsync = program.parseAsync.bind(program);
-  program.parseAsync = ((argv?: readonly string[], parseOptions?: any) => {
-    const args = argv || process.argv;
-    return originalParseAsync(normalizeArgv([...args]), parseOptions);
+  program.parseAsync = (async (argv?: readonly string[], parseOptions?: any) => {
+    const rawArgs = argv || process.argv;
+    const args = normalizeArgv([...rawArgs]);
+    activeArgv = args;
+
+    try {
+      return await originalParseAsync(args, parseOptions);
+    } catch (err: any) {
+      if (
+        err &&
+        (err.code === "commander.helpDisplayed" ||
+          err.code === "commander.help" ||
+          err.code === "commander.version")
+      ) {
+        process.exit(0);
+      }
+
+      const isInteractive =
+        process.stdin.isTTY &&
+        process.stdout.isTTY &&
+        !process.env.CI &&
+        !args.includes("--no-prompt");
+
+      if (isInteractive && err && err.code === "commander.unknownCommand") {
+        const match = err.message.match(/error: unknown command '([^']+)'/);
+        if (match) {
+          const unknownCmd = match[1];
+          const parentCmd = detectParentCommand(args, unknownCmd);
+          const top = getTopSuggestion(unknownCmd, parentCmd);
+          if (top && top.score >= 0.75) {
+            const correctedArgv = resolveCorrectedArgv(args, unknownCmd, top);
+            const displayCmd = formatArgvForDisplay(correctedArgv, name);
+            const shouldRun = await promptAutoRun(displayCmd);
+            if (shouldRun) {
+              const newProg = createProgram(name);
+              return await newProg.parseAsync(correctedArgv, parseOptions);
+            }
+            process.exit(1);
+          }
+        }
+      }
+
+      if (isInteractive && err && err.code === "commander.unknownOption") {
+        const match = err.message.match(/error: unknown option '([^']+)'/);
+        if (match) {
+          const unknownOpt = match[1];
+          if (unknownOpt !== "-help") {
+            const topOpt = getTopOptionSuggestion(unknownOpt);
+            if (topOpt) {
+              const correctedArgv = resolveCorrectedArgv(args, unknownOpt, topOpt);
+              const displayCmd = formatArgvForDisplay(correctedArgv, name);
+              const shouldRun = await promptAutoRun(displayCmd);
+              if (shouldRun) {
+                const newProg = createProgram(name);
+                return await newProg.parseAsync(correctedArgv, parseOptions);
+              }
+              process.exit(1);
+            }
+          }
+        }
+      }
+
+      if (isInteractive && err && err.code === "commander.excessArguments") {
+        const match = err.message.match(/error: too many arguments for '([^']+)'/);
+        if (match) {
+          const cmdName = match[1];
+          let extraArg: string | undefined;
+          for (let i = 0; i < args.length; i++) {
+            if (args[i] === cmdName) {
+              for (let j = i + 1; j < args.length; j++) {
+                if (!args[j].startsWith("-")) {
+                  extraArg = args[j];
+                  break;
+                }
+              }
+              break;
+            }
+          }
+          if (extraArg) {
+            const top = getTopSuggestion(extraArg, cmdName);
+            if (top && top.score >= 0.75) {
+              const correctedArgv = resolveCorrectedArgv(args, extraArg, top);
+              const displayCmd = formatArgvForDisplay(correctedArgv, name);
+              const shouldRun = await promptAutoRun(displayCmd);
+              if (shouldRun) {
+                const newProg = createProgram(name);
+                return await newProg.parseAsync(correctedArgv, parseOptions);
+              }
+              process.exit(1);
+            }
+          }
+        }
+      }
+
+      process.exit(err && err.exitCode !== undefined ? err.exitCode : 1);
+    }
   }) as any;
 
   // Onboarding Wizard
@@ -91,6 +200,12 @@ export function createProgram(name = "gitbridge"): Command {
     .command("explain")
     .description("Explain why GitBridge selected the current identity and configuration")
     .action(() => handleExplainCommand());
+
+  program
+    .command("suggest")
+    .alias("next")
+    .description("Inspect repository and suggest recommended next actions")
+    .action(() => handleSuggestCommand());
 
   program
     .command("env")
@@ -392,19 +507,20 @@ export function createProgram(name = "gitbridge"): Command {
       return handleGitProxyCommand(proxyArgs);
     });
 
-  // Disable Commander's built-in naive suggestions recursively on all commands
-  const disableSuggestionsRecursively = (cmd: Command) => {
+  // Disable Commander's built-in naive suggestions and enable exitOverride recursively
+  const configureRecursively = (cmd: Command) => {
     cmd.showSuggestionAfterError(false);
+    cmd.exitOverride();
     for (const sub of cmd.commands) {
-      disableSuggestionsRecursively(sub);
+      configureRecursively(sub);
     }
   };
-  disableSuggestionsRecursively(program);
+  configureRecursively(program);
 
   // Configure outputError to format errors with intelligent suggestions
   program.configureOutput({
     outputError: (str, write) => {
-      const tooManyMatch = handleTooManyArguments(str, process.argv, name);
+      const tooManyMatch = handleTooManyArguments(str, activeArgv, name);
       if (tooManyMatch) {
         write(tooManyMatch + "\n");
         return;
@@ -413,7 +529,7 @@ export function createProgram(name = "gitbridge"): Command {
       const unknownCmdMatch = str.match(/error: unknown command '([^']+)'/);
       if (unknownCmdMatch) {
         const unknownCmd = unknownCmdMatch[1];
-        const parentCmd = detectParentCommand(process.argv, unknownCmd);
+        const parentCmd = detectParentCommand(activeArgv, unknownCmd);
         write(formatCommandError(unknownCmd, name, parentCmd) + "\n");
         return;
       }
@@ -425,7 +541,7 @@ export function createProgram(name = "gitbridge"): Command {
           program.outputHelp();
           return;
         }
-        const parentCmd = detectParentCommand(process.argv, opt);
+        const parentCmd = detectParentCommand(activeArgv, opt);
         write(formatOptionError(opt, name, parentCmd) + "\n");
         return;
       }

@@ -9,6 +9,7 @@ import { IdentityGuard } from "../safety/identity-guard";
 import { GitCli } from "./git-cli";
 import { RepoAccessDetector } from "../providers/repo-access-detector";
 import { logger } from "@/utils/logger";
+import { sanitizeSshKeyPath } from "@/utils/security";
 
 export interface ProxyExecutionResult {
   exitCode: number;
@@ -165,13 +166,15 @@ export class GitProxy {
               const detector = new RepoAccessDetector(this.store);
               const accessRes = await detector.detectAccess({ url: cloneUrl, targetPath });
               if (accessRes.matched && accessRes.sshKeyPath && fs.existsSync(accessRes.sshKeyPath)) {
-                injectedEnv.GIT_SSH_COMMAND = `ssh -i "${accessRes.sshKeyPath}" -o IdentitiesOnly=yes`;
+                const safeKey = sanitizeSshKeyPath(accessRes.sshKeyPath);
+                injectedEnv.GIT_SSH_COMMAND = `ssh -i "${safeKey}" -o IdentitiesOnly=yes`;
               }
             }
           } else {
             const ctx = await this.resolver.resolve(cwd);
             if (ctx.account && ctx.account.sshKeyPath && fs.existsSync(ctx.account.sshKeyPath)) {
-              injectedEnv.GIT_SSH_COMMAND = `ssh -i "${ctx.account.sshKeyPath}" -o IdentitiesOnly=yes`;
+              const safeKey = sanitizeSshKeyPath(ctx.account.sshKeyPath);
+              injectedEnv.GIT_SSH_COMMAND = `ssh -i "${safeKey}" -o IdentitiesOnly=yes`;
             }
           }
         } catch {

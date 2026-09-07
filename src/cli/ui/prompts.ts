@@ -78,4 +78,21 @@ export async function promptConfirm(options: {
   return Boolean(res);
 }
 
+export async function promptAutoRun(commandToRun: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || process.env.CI) {
+    return false;
+  }
+
+  const res = await p.confirm({
+    message: `Would you like to run '${pc.cyan(commandToRun)}' instead?`,
+    initialValue: true,
+  });
+
+  if (p.isCancel(res)) {
+    return false;
+  }
+
+  return Boolean(res);
+}
+
 export { p };

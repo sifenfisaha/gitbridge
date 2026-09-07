@@ -3,17 +3,45 @@
 [![npm version](https://img.shields.io/npm/v/@fuad24/gitbridge.svg)](https://www.npmjs.com/package/@fuad24/gitbridge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-88%20passed-brightgreen.svg)](https://github.com/FuadTesfaye/gitbridge/actions)
+[![Tests](https://img.shields.io/badge/tests-225%20passed-brightgreen.svg)](https://github.com/FuadTesfaye/gitbridge)
+[![Security](https://img.shields.io/badge/security-Fort%20Knox%20(6%20layers)-brightgreen.svg)](https://github.com/FuadTesfaye/gitbridge)
+[![Telemetry](https://img.shields.io/badge/telemetry-zero%20(100%25%20offline--first)-blueviolet.svg)](https://github.com/FuadTesfaye/gitbridge)
 
-> **GitBridge is a cross-platform Git context manager that automatically maps a repository to the correct Git identity, provider account, authentication credentials, and SSH configuration while preserving the standard Git workflow.**
+> **GitBridge is a zero-wrapper Git context manager that automatically maps every repository to the correct author identity, provider account, authentication credentials, and SSH configuration while preserving your standard Git workflow.**
 
-A developer should be able to move seamlessly across GitHub, GitLab, Bitbucket, multiple accounts, and multiple emails without constantly changing Git or SSH configurations manually. Everything in GitBridge exists to make that happen.
+Work seamlessly across **GitHub**, **GitLab**, **Bitbucket**, enterprise self-hosted servers, personal side-projects, and corporate codebases without manually editing Git configs, juggling SSH host aliases, or accidentally committing work code under your personal email.
 
 ---
 
-## 1. The Core Architecture: Three Separate Layers
+## Table of Contents
 
-In GitBridge, **Identity**, **Account**, and **Provider** are completely decoupled:
+- [The Core Architecture: Three Decoupled Layers](#1-the-core-architecture-three-decoupled-layers)
+- [How It Is Safe & How Things Are Stored Locally](#2-how-it-is-safe--how-things-are-stored-locally)
+- [Installation & Setup](#3-installation--setup)
+- [Quick Start in 60 Seconds](#4-quick-start-in-60-seconds)
+- [Core Features & Usage](#5-core-features--usage)
+  - [1. Status, Context & Prompt Badges](#1-status-context--shell-prompt-badges)
+  - [2. Decision Tree Transparency (`gb explain`)](#2-decision-tree-transparency-gb-explain)
+  - [3. Proactive Next-Step Recommendations (`gb suggest`)](#3-proactive-next-step-recommendations-gb-suggest)
+  - [4. Smart Clone with Access Tracking (`gb clone`)](#4-smart-clone-with-automated-access-tracking-gb-clone)
+  - [5. Workspace Directory Rule Inheritance (`gb rules`)](#5-workspace-directory-rule-inheritance-gb-rules)
+  - [6. Persistent Repository Binding (`gb repo`)](#6-persistent-repository-binding-gb-repo)
+  - [7. Git-Native Typo Autocorrection & Interactive Auto-Run](#7-git-native-typo-autocorrection--interactive-auto-run)
+  - [8. Built-in Security Audit & Auto-Remediation (`gb sec`)](#8-built-in-security-audit--auto-remediation-gb-sec)
+  - [9. Native Git Interoperability & Optional Shims (`gb override`)](#9-native-git-interoperability--optional-shims-gb-override)
+  - [10. First-Class IDE Synchronization (`gb ide`)](#10-first-class-ide-synchronization-gb-ide)
+  - [11. Modern SSH Key Management (`gb ssh`)](#11-modern-ssh-key-management-gb-ssh)
+  - [12. Concurrent Multi-Remote Push (`gb push`)](#12-concurrent-multi-remote-push-gb-push)
+  - [13. System Diagnostics & Self-Healing (`gb doc`)](#13-system-diagnostics--self-healing-gb-doc)
+- [Complete CLI Command Matrix](#6-complete-cli-command-matrix)
+- [Development & Verification](#7-development--verification)
+- [License](#8-license)
+
+---
+
+## 1. The Core Architecture: Three Decoupled Layers
+
+In traditional Git, your author email, your hosting account, and your SSH key are entangled. GitBridge cleanly separates them into three independent layers:
 
 ```text
                      GITBRIDGE
@@ -34,171 +62,181 @@ In GitBridge, **Identity**, **Account**, and **Provider** are completely decoupl
             Account → Identity → SSH Credentials
                          │
                          ▼
-                  Native Git CLI
-             (git commit, git push)
+                  Native Git & SSH
+             (git commit, git push, IDE)
 ```
 
 ### Why This Separation Matters:
-- **Email ≠ Provider Account**: Your commit identity `fuad@company.com` is distinct from your GitHub username `fuad-company` or GitLab handle `fuadt`.
-- **An Identity can span multiple accounts**: You can use the same work identity across GitHub, GitLab, and Bitbucket.
-- **Repositories determine the Context**: When you navigate into a repository, GitBridge asks:
-  1. *Where am I?* (Repository root path)
-  2. *What remote does it use?* (`origin` URL)
-  3. *Which provider is that?* (GitHub, GitLab, or self-hosted instance)
-  4. *Which account should access it?* (Provider username & secure token)
-  5. *Which author identity should I use?* (Name & Email)
-  6. *Which SSH credentials should authenticate it?* (Host alias & private key)
-  7. *Are these all consistent and safe?* (Safety Mode / Mismatch check)
+- **Email ≠ Hosting Account**: Your commit identity `alice@company.com` is distinct from your GitHub username `@alice-corp` or GitLab handle `@alice`.
+- **One Identity Spans Multiple Providers**: Your single work identity can seamlessly span GitHub, GitLab, and internal Git servers.
+- **Context is Auto-Resolved**: When you enter a repository, GitBridge inspects the repository root, directory rules, and remote URLs to activate the exact identity and credentials bundle automatically.
 
 ---
 
-## 2. Design Principle: Discover Broadly, Configure Narrowly, Activate Lazily
+## 2. How It Is Safe & How Things Are Stored Locally
 
-GitBridge supports many platforms, but it **never forces you to configure providers you do not use**.
+GitBridge is designed from the ground up to be **non-intrusive, zero-telemetry, and offline-first**.
 
-1. **Discover Broadly**: Inspects `~/.gitconfig`, `~/.ssh/config`, `~/.git-credentials`, and local repo remotes before asking any questions.
-2. **Configure Narrowly**: Asks which providers you actually use, and only activates those.
-3. **Activate Lazily**: When you navigate into a project using a new or self-hosted provider (e.g. `http://172.27.23.116`), GitBridge detects it on the spot and offers quick configuration.
+### 100% Offline-First & Zero Telemetry
+- **Zero External Tracking**: GitBridge **never** transmits configurations, repository paths, SSH keys, or credentials to any remote server or analytics service.
+- **Direct Provider Communication**: Network traffic occurs **only** when you explicitly authenticate (`gb auth login`), clone a repository, or check API connectivity (`gb doctor`), communicating directly with your configured Git providers (e.g. `api.github.com`, your GitLab instance).
+
+### Local Storage Architecture (`~/.gitbridge`)
+All GitBridge configuration is stored in your user profile under `~/.gitbridge` (configurable via `GITBRIDGE_HOME` or `XDG_CONFIG_HOME`):
+
+| File Path | Mode | Contents & Security Model |
+|---|---|---|
+| `~/.gitbridge/config.json` | `0600` | Global settings, provider configurations, and directory routing rules |
+| `~/.gitbridge/identities.json` | `0600` | Registered Git author profiles (Name, Email, Signing Key) |
+| `~/.gitbridge/accounts.json` | `0600` | Account metadata (Username, host, linked SSH key path — **no tokens stored here**) |
+| `~/.gitbridge/repos.json` | `0600` | Explicit local repository overrides and remembered bindings |
+| `~/.gitbridge/vault.enc` | `0600` | Authenticated fallback encrypted vault (**AES-256-GCM** + **PBKDF2**) |
+| `~/.gitbridge/generated/main.gitconfig` | `0600` | Compiled native Git config included via `~/.gitconfig` |
+| `~/.gitbridge/generated/ssh_config` | `0600` | Compiled SSH host aliases included via `~/.ssh/config` |
+| `~/.gitbridge/generated/rules/*.gitconfig` | `0600` | Per-directory compiled Git rules with `[user]` and `[url]` blocks |
+| `~/.gitbridge/backups/` | `0700` | Automated timestamped backups of `~/.gitconfig` and `~/.ssh/config` before any modification |
+
+### Hardware Keyring Integration
+Personal access tokens and OAuth secrets are **never stored in plaintext**. GitBridge saves them directly into your operating system's native secure credential manager:
+- **macOS**: Apple Keychain Services via `/usr/bin/security`
+- **Linux / BSD**: Secret Service API via `secret-tool` / FreeDesktop Keyring
+- **Windows**: Windows Credential Manager via DPAPI & `cmdkey`
+- **Universal Encrypted Vault Fallback**: If no system keyring daemon is available (headless servers, CI/CD, containers), GitBridge stores tokens in `~/.gitbridge/vault.enc` using authenticated **AES-256-GCM** encryption with keys derived via **PBKDF2-HMAC-SHA-256** (100,000 iterations) bound to your machine hardware ID.
+
+### Strict Defensive Hardening
+- **POSIX Permission Lockdown**: `~/.gitbridge` and subdirectories are created with `0700` (`rwx------`) permissions, and sensitive files are written atomically with mode `0600` (`rw-------`).
+- **CRLF Injection Immunity**: All user inputs (names, emails, keys, rule paths) are sanitized to strip carriage returns, line feeds, and control characters, preventing malicious section forging (`[core]\nsshCommand=...`) in `.gitconfig`.
+- **PowerShell Script Hardening**: Windows Credential Store calls use strict parameter filtering and UTF-16LE Base64 `-EncodedCommand` execution, eliminating command injection risks.
+- **Untrusted Repo Isolation**: GitBridge strictly ignores working tree `.gitbridge.json` files to prevent malicious third-party cloned repositories from hijacking developer commit identities.
+- **Zero Wrapper Overhead**: Standard `git commit` and `git push` run against native Git. Disabling GitBridge (`gb disable`) completely restores your original configuration from backup in 1 second.
 
 ---
 
-## 3. Installation
+## 3. Installation & Setup
 
-### One-Line Install (Linux & macOS)
+### One-Line Installers
+
+**Linux & macOS:**
 ```bash
 curl -fsSL https://cdn.jsdelivr.net/gh/FuadTesfaye/gitbridge@main/install.sh | bash
-# Or directly from GitHub:
-# curl -fsSL https://raw.githubusercontent.com/FuadTesfaye/gitbridge/main/install.sh | bash
 ```
 
-### One-Line Install (Windows PowerShell)
+**Windows PowerShell:**
 ```powershell
 irm https://cdn.jsdelivr.net/gh/FuadTesfaye/gitbridge@main/install.ps1 | iex
-# Or directly from GitHub:
-# irm https://raw.githubusercontent.com/FuadTesfaye/gitbridge/main/install.ps1 | iex
 ```
 
-### Global Installation via npm or Bun
+### Global Install via npm or Bun
 ```bash
 npm install -g @fuad24/gitbridge
 # or
 bun add -g @fuad24/gitbridge
 ```
 
-### Dual Binaries
-GitBridge provides both `gitbridge` (verbose) and `gb` (fast shorthand):
-```bash
-gb --version
-gitbridge --version
-```
+### Dual CLI Binaries
+GitBridge ships with two CLI entrypoints:
+- `gb`: Fast shorthand for daily terminal usage (`gb st`, `gb ctx`, `gb clone`).
+- `gitbridge`: Full command name (`gitbridge status`, `gitbridge setup`).
 
 ---
 
-## 4. Quick Start
+## 4. Quick Start in 60 Seconds
 
-### Option A: 1-Second Instant Setup (`--quick`)
-Scans your system tools, discovered SSH keys, and existing Git remotes, then applies optimal settings automatically:
+### Step 1: Run Instant Setup
 ```bash
+# 1-second automated setup (scans Git remotes, SSH keys, and configures defaults):
 gb setup --quick
-```
 
-### Option B: Guided Progressive Wizard
-Interactive onboarding that configures only what you need:
-```bash
+# Or run the guided interactive onboarding wizard:
 gb setup
 ```
 
-### Inspecting Your Active Context
+### Step 2: Add Your Identities
 ```bash
-# Check overall GitBridge status
+# Add personal identity:
+gb id add --id personal --name "Alice Doe" --email "alice@gmail.com" --default
+
+# Add company identity:
+gb id add --id work --name "Alice Doe" --email "alice@company.com"
+```
+
+### Step 3: Authenticate Accounts
+```bash
+# Authenticate GitHub (via web browser device flow or PAT):
+gb auth login github
+
+# Authenticate GitLab (supports self-hosted instances):
+gb auth login gitlab --host gitlab.company.com
+```
+
+### Step 4: Map Your Folders
+```bash
+# All repositories inside ~/work will commit as Alice Work:
+gb rules add ~/work work --provider gitlab
+
+# All repositories inside ~/Personal will commit as Alice Personal:
+gb rules add ~/Personal personal --provider github
+```
+
+### Step 5: Activate Native Integration
+```bash
+gb enable
+```
+
+**Done!** When you navigate into any repository, native `git commit` and `git push` will automatically use the correct author profile and SSH key.
+
+---
+
+## 5. Core Features & Usage
+
+### 1. Status, Context & Shell Prompt Badges
+
+Inspect your active configuration and verify what Git will do in the current directory:
+
+```bash
+# Show global GitBridge status (identities, accounts, rules, integration status):
 gb st
 
-# Inspect resolved identity and remote routing for the current directory
+# Inspect resolved identity, remote URL, provider, and SSH key for current folder:
 gb ctx
 
-# Explain WHY GitBridge selected a particular identity (decision tree)
+# Machine-readable JSON output for scripts, CI, and IDE extensions:
+gb ctx --json
+
+# Print active author name and email:
+gb cur
+
+# Get a compact, colorized badge for your shell prompt (e.g. "[github:alice] [personal]"):
+gb cur -p
+```
+
+**Add to your shell prompt:**
+```bash
+# ~/.bashrc or ~/.zshrc:
+export PS1="\u@\h:\w \$(gb cur -p)\$ "
+```
+
+---
+
+### 2. Decision Tree Transparency (`gb explain`)
+
+Never wonder *why* Git committed with a specific email again. `gb explain` walks the 6 deterministic resolution tiers and explains the exact reasoning:
+
+```bash
 gb explain
-
-# Get compact badge for shell prompts (e.g. "[GitLab:fuadt] [work]")
-gb current --prompt
 ```
 
----
-
-## 5. Daily Developer Workflow (Zero Friction)
-
-### You keep using normal Git commands:
-```bash
-cd ~/Personal/my-side-project
-git commit -m "feat: personal project update"
-git push origin main
-# → Commits as: Fuad Tesfaye <personal@gmail.com>
-# → Pushes via: github.com SSH key
-
-cd ~/Work/corporate-service
-git commit -m "feat: company update"
-git push origin main
-# → Commits as: Fuad Tesfaye <fuad@company.com>
-# → Pushes via: GitLab enterprise SSH key
-```
-**No wrappers, no environment variables, no manual `git config user.email` required.**
-
----
-
-### 6. Signature Capabilities
-
-### 1. Automated Repository Access Tracking & Smart Clone (`gb clone`)
-When you clone a repository, GitBridge automatically determines **which authenticated account has access** to it:
-1. **Namespace Match**: Automatically links repositories owned by your username (e.g. `fuadpersonal/project` -> `fuad@personal.me`).
-2. **Provider API Probe**: Queries GitHub, GitLab, or Bitbucket APIs using your secured OS Keyring tokens to verify access permissions (`admin`, `write`, `read`).
-3. **SSH Key Routing**: Selects and routes the exact SSH key linked to the account.
-4. **Persistent Memory**: Writes `.git/gitbridge.json`, registers in `repos.json`, configures local Git `user.name` & `user.email`, and activates pre-commit safety hooks. **It remembers forever without asking again.**
-
-```bash
-# Smart clone with automated access tracking:
-gb clone git@github.com:FuadTesfaye/gitbridge.git
-
-# Clone with explicit identity, account, or email:
-gb clone git@gitlab.com:company/api.git -i work -a gitlab_fuadt -e "fuad@company.com"
-```
-
-### 2. Workspace Directory Rule Inheritance (`gb rules add`)
-Map your workspace directories to specific Git identities and provider accounts. Everything cloned or created inside that folder automatically inherits the profile:
-```bash
-# Map work folder:
-gb rules add ~/work work --provider gitlab --account gitlab_work
-
-# Map personal folder:
-gb rules add ~/Personal personal --provider github --account github_personal
-```
-Now, whenever you clone or `git init` inside `~/work/client-api`, it is automatically configured for `work` without any prompts.
-
-### 3. Persistent Repository Binding (`gb repo set`)
-Lock any existing repository permanently to an identity, email, and provider:
-```bash
-# Pin repository to an identity:
-gb repo set . --identity work
-
-# Pin directly using an email:
-gb repo set . --email "fuad@company.com" --provider gitlab
-
-# List remembered repositories:
-gb repo list
-```
-
-### 4. Decision Tree Diagnostics (`gb explain`)
-Ever wonder why a commit used a specific email? `gb explain` walks the 6 deterministic resolution tiers:
 ```text
   GITBRIDGE DECISION TREE (WHY?)
   ──────────────────────────────────────────────────
-  Directory:        /home/fuaf24/work/project
-  Repository Root:  /home/fuaf24/work/project
-  
+  Directory:              /home/alice/work/api-gateway
+  Repository Root:        /home/alice/work/api-gateway
+
   Resolution Hierarchy Analysis:
     ○ Tier 1: Local Repository Override (.git/gitbridge.json) (none found)
     ○ Tier 2: Repository Profile (repos.json) (none found)
     ✔ Tier 3: Directory Rule (rule_work)
-      Path pattern: ~/work (expanded: /home/fuaf24/work)
+      Path pattern: ~/work (expanded: /home/alice/work)
       Won via longest-prefix path match among 2 configured rule(s).
       Mapped to identity ID: 'work'
     ○ Tier 4: Remote Repository Access Detection (skipped)
@@ -206,132 +244,305 @@ Ever wonder why a commit used a specific email? `gb explain` walks the 6 determi
     ○ Tier 6: System Git Fallback (skipped)
 
   Final Resolved Outcomes:
-    • Identity:          Fuad Tesfaye <fuad@company.com>
-    • Provider Account:  GITLAB (fuadwork)
-    • SSH Key:           /home/fuaf24/.ssh/id_ed25519
+    • Identity:          Alice Doe <alice@company.com>
+    • Provider Account:  GITLAB (alice-work)
+    • SSH Key:           /home/alice/.ssh/id_ed25519_corp
     • Remote Provider:   GitLab (gitlab.company.com) - Configured
-```
-
-### 5. Transparent Native Git Override (`gb override enable`)
-Want standard `git commit` and `git push` to use GitBridge context without typing `gb`?
-```bash
-# Enable native git override:
-gb override enable
-
-# Verify override status:
-gb override status
-
-# Safely disable and restore default behavior:
-gb override disable
-```
-- **Strictly active only when enabled**: When disabled, the shim executes real native `git` with **0ms fast bypass**.
-- **Transparent IDE Sync**: Run `gb ide sync` to configure `git.path` in VS Code, Cursor, and Antigravity automatically.
-
-### 6. Built-in Security Audit & Auto-Remediation (`gb sec`)
-Built-in security engine that protects against credential leaks and permission vulnerabilities:
-```bash
-# Run full security audit:
-gb sec check
-
-# Auto-remediate findings (lock permissions to 0700/0600, scrub remote tokens into Keyring, install hooks):
-gb sec fix
-
-# Deep-scan repository tree for leaked API tokens, private keys, or .env files:
-gb sec scan [path]
-```
-
-### 7. Pre-Commit Identity Guard & Safety Mode
-Prevents accidentally committing with personal email inside a company repository:
-If your repository's local Git email conflicts with your verified GitBridge rule, commits and pushes are blocked with a clear warning:
-```text
-⚠ [GitBridge Safety Warning] Mismatched Git commit identity!
-  Current:  'personal@gmail.com'
-  Expected: 'fuad@company.com' (Fuad Work)
-```
-
-### 8. Machine-Readable Context (`gb ctx --json`)
-Ideal for CI scripts, terminal prompts, and IDE integrations:
-```bash
-gb ctx --json
-```
-
-### 9. Shell Prompt & Autocompletion Integration
-Add GitBridge context directly to your shell prompt:
-```bash
-# In ~/.bashrc or ~/.zshrc:
-export PS1="\u@\h:\w \$(gb current --prompt)\$ "
-
-# Generate shell completions:
-eval "$(gb completion bash)"   # or zsh / fish
 ```
 
 ---
 
-## 7. CLI Command Matrix
+### 3. Proactive Next-Step Recommendations (`gb suggest`)
 
-| Shorthand | Full Command | Arguments & Options | Description |
+Run `gb suggest` (or `gb next`) in any folder. GitBridge analyzes your workspace, remotes, identity alignment, and integration status, providing ranked, contextual recommendations:
+
+```bash
+gb suggest
+```
+
+```text
+  GitBridge Proactive Suggestions
+  ──────────────────────────────────────────────────
+  Target: api-gateway (/home/alice/work/api-gateway)
+  Active: Alice Doe <alice@company.com> [work]
+
+  1. [RECOMMENDED] Enable native Git command override
+     Transparently route standard 'git' commands through GitBridge shims with zero wrapper friction.
+     gb override enable
+
+  2. [INFO] Synchronize installed IDEs (VS Code, Cursor, Antigravity)
+     Configure your editor's internal Git client to respect GitBridge identities automatically.
+     gb ide sync
+
+  3. [INFO] Verify security audit & install pre-commit guards
+     Audit permissions, scrub plaintext credentials, and verify identity protection hooks.
+     gb security check
+```
+
+---
+
+### 4. Smart Clone with Automated Access Tracking (`gb clone`)
+
+Clone any repository with automated account detection and persistent context binding:
+
+```bash
+# Smart clone:
+gb clone git@github.com:organization/project.git
+
+# Clone with explicit identity, account, or email override:
+gb clone git@gitlab.com:client/repo.git -i work -a gitlab_alice -e "alice@company.com"
+```
+
+**What `gb clone` does automatically:**
+1. **Namespace Match**: Detects if the repository namespace belongs to an authenticated account.
+2. **Token API Probe**: Queries GitHub, GitLab, or Bitbucket APIs using your OS Keyring tokens to verify repository access permissions.
+3. **SSH Key Routing**: Configures SSH alias routing so native Git uses the exact private key linked to that account.
+4. **Persistent Binding**: Writes `.git/gitbridge.json`, registers the profile in `repos.json`, configures local `user.name` & `user.email`, and installs pre-commit safety guards. **It remembers forever.**
+
+---
+
+### 5. Workspace Directory Rule Inheritance (`gb rules`)
+
+Map folders to identities. Everything inside that folder automatically inherits the profile:
+
+```bash
+# List directory rules:
+gb rules ls
+
+# Add rule mapping ~/work to the 'work' identity:
+gb rules add ~/work work --provider gitlab --account gitlab_work
+
+# Add rule mapping ~/Personal to the 'personal' identity:
+gb rules add ~/Personal personal --provider github
+
+# Remove a rule:
+gb rules rm rule_work
+```
+
+---
+
+### 6. Persistent Repository Binding (`gb repo`)
+
+Lock any repository permanently to an identity, email, or provider:
+
+```bash
+# Bind current repository to identity 'work':
+gb repo set . --identity work
+
+# Bind by email address:
+gb repo set . --email "alice@company.com" --provider gitlab
+
+# List all remembered repository profiles:
+gb repo ls
+
+# Remove persistent repository profile:
+gb repo rm .
+```
+
+---
+
+### 7. Git-Native Typo Autocorrection & Interactive Auto-Run
+
+GitBridge features Git-exact error phrasing and interactive execution in TTY sessions:
+
+```text
+$ gb stauts --json
+gb: 'stauts' is not a gb command. See 'gb --help'.
+
+The most similar command is:
+  gb status (or 'gb st')
+  Show overall GitBridge status, active identities, accounts, and rules
+
+? Would you like to run 'gb status --json' instead? (Y/n)
+```
+
+- **Argument Preservation**: Flags and parameters (`--json`, `-i work`, paths) are preserved when executing the suggested command.
+- **Non-Interactive Safety**: In scripts, CI/CD, or with `--no-prompt`, prompts are skipped cleanly.
+
+---
+
+### 8. Built-in Security Audit & Auto-Remediation (`gb sec`)
+
+Run complete security audits covering 6 security layers:
+
+```bash
+# Full security audit:
+gb sec check
+```
+
+```text
+  GITBRIDGE SECURITY AUDIT
+  ──────────────────────────────────────────────────
+  1. Filesystem & Permission Hardening
+     ✔ All GitBridge configuration & SSH key files have strict permissions (0700/0600)
+  2. Keyring & Vault Architecture
+     ✔ Active Keyring Backend: Apple Keychain (with Encrypted Vault fallback)
+     ✔ Authenticated Accounts: 2 stored with hardware-bound entropy
+  3. Staged Changes Secret Inspection
+     ✔ No plaintext API tokens, private keys, or .env files detected in staging area
+  4. Remote URL Plaintext Credential Check
+     ✔ No plaintext tokens or passwords embedded in repository remotes
+  5. Safety Guard & Pre-Commit/Push Protection
+     ✔ Pre-Commit Secret Guard: Active
+     ✔ Pre-Push Identity Guard:  Active
+  6. Configuration Integrity & Repository Trust
+     ✔ Git & SSH generated configs verified free of injection vulnerabilities
+     ✔ Working-tree root is clean of untrusted configuration files
+  ──────────────────────────────────────────────────
+  ✔ Security status: Fort Knox (All 6 security layers passing!)
+```
+
+```bash
+# Auto-lock permissions to 0700/0600, scrub remote tokens, and install hooks:
+gb sec fix
+
+# Deep-scan a directory tree for leaked private keys, API tokens, or .env files:
+gb sec scan [path]
+```
+
+---
+
+### 9. Native Git Interoperability & Optional Shims (`gb override`)
+
+GitBridge works seamlessly through native `[includeIf]` and `credential.helper`. For developers who want standard `git clone` and `git commit` to automatically benefit from GitBridge shims:
+
+```bash
+# Enable native git override shims in ~/.gitbridge/shims:
+gb override enable
+
+# Check override status:
+gb override status
+
+# Safely remove shims and restore original PATH:
+gb override disable
+```
+
+---
+
+### 10. First-Class IDE Synchronization (`gb ide`)
+
+Synchronize Git path settings with your installed code editors:
+
+```bash
+# Sync Git settings with VS Code, Cursor, Antigravity, and VSCodium:
+gb ide sync
+
+# Check IDE synchronization status:
+gb ide status
+
+# Restore original IDE settings:
+gb ide unsync
+```
+
+---
+
+### 11. Modern SSH Key Management (`gb ssh`)
+
+```bash
+# List discovered SSH keys and linked accounts:
+gb ssh ls
+
+# Generate a modern ed25519 SSH key:
+gb ssh gen --name id_ed25519_company --email alice@company.com
+
+# Link an SSH key to an authenticated provider account:
+gb ssh link ~/.ssh/id_ed25519_company github_alice
+```
+
+---
+
+### 12. Concurrent Multi-Remote Push (`gb push`)
+
+Push the active branch across multiple remotes concurrently:
+
+```bash
+# Push current branch to all configured remotes simultaneously:
+gb push --all
+
+# Push tags:
+gb push --tags
+```
+
+---
+
+### 13. System Diagnostics & Self-Healing (`gb doc`)
+
+Run end-to-end diagnostics across your Git executable, OS Keyring, SSH keys, and provider APIs:
+
+```bash
+gb doc
+```
+
+---
+
+## 6. Complete CLI Command Matrix
+
+| Shorthand | Full Command | Parameters / Options | Description |
 |---|---|---|---|
-| `gb setup` | `gitbridge setup` | `-q, --quick` | Progressive onboarding wizard; `--quick` sets up in 1 second |
-| `gb st` | `gitbridge status` | None | Overall status (identities, accounts, rules, integrations) |
+| `gb setup` | `gitbridge setup` | `-q, --quick` | Progressive onboarding wizard (`--quick` sets up in 1 second) |
+| `gb st` | `gitbridge status` | None | Display identities, accounts, rules, and integration states |
 | `gb ctx` | `gitbridge context` | `--json` | Inspect resolved identity context for current directory |
-| `gb explain` | `gitbridge explain` | None | Decision tree breakdown across all 6 resolution tiers |
 | `gb cur` | `gitbridge current` | `-p, --prompt`, `--email`, `--name` | Print active identity or compact prompt badge |
+| `gb explain` | `gitbridge explain` | None | 6-tier decision tree breakdown explaining active identity |
+| `gb suggest` | `gitbridge suggest` | None | Context-aware proactive workspace recommendations |
 | `gb clone` | `gitbridge clone` | `<url> [dir] [-i id] [-a acc] [-e email]` | Smart clone with access auto-detection & persistent binding |
-| `gb repo set` | `gb repo set` | `[path] [-i id] [-e email] [-p prov] [-a acc]` | Bind repo permanently to identity, email, and provider |
-| `gb repo ls` | `gb repo list` | None | List remembered repository bindings |
+| `gb repo set` | `gb repo set` | `[path] [-i id] [-e email] [-p prov] [-a acc]` | Permanently bind repository to identity and provider |
+| `gb repo ls` | `gb repo list` | None | List remembered repository profiles |
 | `gb repo rm` | `gb repo unset` | `[path]` | Remove repository binding |
 | `gb sw [id]` | `gitbridge switch [id]` | `-g, --global` | Switch active identity locally or globally |
 | `gb env` | `gitbridge env` | None | Print shell exports (`GIT_AUTHOR_NAME`, etc.) |
-| `gb init` | `gitbridge init` | None | Initialize repo profile and install pre-commit guard |
-| `gb doc` | `gitbridge doctor` | None | Run system, keyring, SSH, and provider health checks |
+| `gb init` | `gitbridge init` | None | Interactive repository initialization wizard |
+| `gb doc` | `gitbridge doctor` | None | Run toolchain, keyring, SSH, and provider health checks |
 | `gb enable` | `gitbridge enable` | None | Inject managed include blocks into `~/.gitconfig` and `~/.ssh/config` |
-| `gb disable` | `gitbridge disable` | None | Safely remove GitBridge integration blocks |
-| `gb id ls` | `gb identity list` | None | List configured commit identities |
-| `gb id add` | `gb identity add` | `--id <id> --name <n> --email <e>` | Register new commit author identity |
-| `gb id rm` | `gb identity remove` | `<id>` | Delete an identity |
+| `gb disable` | `gitbridge disable` | None | Safely remove GitBridge integration blocks and restore backups |
+| `gb id ls` | `gb identity list` | None | List all configured commit identities |
+| `gb id add` | `gb identity add` | `--id <id> --name <n> --email <e> [--signing-key <k>]` | Register a new commit author identity |
+| `gb id rm` | `gb identity remove`| `<id>` | Delete an identity |
 | `gb acc ls` | `gb account list` | None | List authenticated provider accounts |
-| `gb acc rm` | `gb account remove` | `<id>` | Delete account and erase token from OS keychain |
-| `gb auth login` | `gb auth login` | `[provider] [-t token] [-u user -p pass] [--host h]` | Authenticate with GitHub, GitLab, or Bitbucket |
-| `gb auth logout`| `gb auth logout` | `<provider> [username]` | Revoke credentials from OS secure storage |
-| `gb prov ls` | `gb provider list` | None | List supported providers, active state, and capabilities |
-| `gb prov enable`| `gb provider enable`| `<provider>` | Enable a provider for management |
+| `gb acc rm` | `gb account remove` | `<id>` | Delete an account and erase credentials from OS keychain |
+| `gb auth login`| `gb auth login` | `[provider] [-t token] [-u user -p pass] [--host h]` | Log in to GitHub, GitLab, or Bitbucket |
+| `gb auth logout`| `gb auth logout` | `<provider> [username]` | Revoke and erase credentials from secure storage |
+| `gb prov ls` | `gb provider list` | None | List supported providers, active status, and capabilities |
+| `gb prov enable`| `gb provider enable`| `<provider>` | Enable a provider |
 | `gb prov disable`| `gb provider disable`| `<provider>` | Disable a provider (preserves stored credentials) |
 | `gb rules ls` | `gb rule list` | None | List directory routing rules |
-| `gb rules add` | `gb rule add` | `<path> <identityId> [--account <acc>]` | Map a workspace folder to an identity |
+| `gb rules add` | `gb rule add` | `<path> <identityId> [--account <acc>]` | Map a workspace directory to an identity |
 | `gb rules rm` | `gb rule remove` | `<idOrPath>` | Delete a directory rule |
 | `gb ssh ls` | `gb ssh list` | None | List SSH keys in `~/.ssh` and linked accounts |
-| `gb ssh gen` | `gb ssh generate` | `[--name <name>] [--email <email>]` | Generate new ed25519 SSH key |
-| `gb ssh link` | `gb ssh link` | `[keyPath] [accountId]` | Link SSH key to an account |
-| `gb sec check`| `gb security check` | None | Full security health audit (permissions, remotes, keyring, staged secrets) |
+| `gb ssh gen` | `gb ssh generate` | `[--name <n>] [--email <e>]` | Generate modern ed25519 SSH key |
+| `gb ssh link` | `gb ssh link` | `[keyPath] [accountId]` | Associate SSH key with an account |
+| `gb sec check`| `gb security check` | None | Full security health audit across 6 security layers |
 | `gb sec fix` | `gb security fix` | None | Auto-lock permissions to `0700/0600`, scrub remote tokens, install hooks |
 | `gb sec scan`| `gb security scan` | `[path]` | Scan directory tree for private keys, API tokens, and `.env` files |
-| `gb override` | `gb override` | `enable \| disable \| status` | Transparently intercept standard `git` binary |
-| `gb ide` | `gb ide` | `sync \| unsync \| status` | Sync Git path & terminal env with VS Code / Cursor / Antigravity |
-| `gb update` | `gitbridge update` | `[-c, --check] [-f, --force]` | Check for and install the latest GitBridge release from npm |
+| `gb override` | `gb override` | `enable \| disable \| status` | Manage transparent native Git override shims |
+| `gb ide` | `gb ide` | `sync \| unsync \| status` | Configure Git path & terminal env in VS Code / Cursor / Antigravity |
+| `gb push` | `gb push` | `[target] [--all] [--tags] [-f]` | Concurrently push active branch to multiple remotes |
+| `gb update` | `gitbridge update` | `[-c, --check] [-f, --force]` | Check for and install latest GitBridge release from npm |
 | `gb completion`| `gb completion` | `[bash \| zsh \| fish]` | Generate shell autocompletion script |
 
 ---
 
-## 8. Development & Testing
+## 7. Development & Verification
 
-GitBridge is written in **TypeScript** and runs natively on **Bun**:
+GitBridge is developed in **TypeScript** and built with **Bun**:
 
 ```bash
-# Run complete test suite (88 unit & e2e tests)
+# Run the complete test suite (225 tests across 39 suites)
 bun test
 
-# Typecheck codebase without emitting
+# Typecheck codebase without emitting files
 bun run typecheck
 
-# Compile production bundles into dist/
+# Build production bundles into dist/
 bun run build
 
-# Run local CLI binary directly
+# Run local binary directly
 bun run bin/gb.ts --help
+bun run bin/gb.ts st
 ```
 
 ---
 
-## 9. License
+## 8. License
 
-MIT License. Designed and crafted with precision for developers working across multiple Git universes.
+MIT License © 2026 Fuad Tesfaye. Designed and crafted with precision for developers operating across multiple Git universes.

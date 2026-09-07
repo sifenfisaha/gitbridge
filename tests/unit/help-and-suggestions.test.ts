@@ -25,6 +25,7 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       expect(help).toContain("status");
       expect(help).toContain("context");
       expect(help).toContain("explain");
+      expect(help).toContain("suggest");
       expect(help).toContain("current");
       expect(help).toContain("switch");
       expect(help).toContain("clone");
@@ -58,6 +59,7 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       // Options
       expect(help).toContain("-V, --version");
       expect(help).toContain("-h, --help, -help");
+      expect(help).toContain("--no-prompt");
 
       // Examples & Documentation
       expect(help).toContain("EXAMPLES");
@@ -130,7 +132,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "statsu"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown command: 'statsu'");
+      expect(output).toContain("gb: 'statsu' is not a gb command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb status (or 'gb st')");
     });
 
@@ -138,7 +141,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "ident"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown command: 'ident'");
+      expect(output).toContain("gb: 'ident' is not a gb command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb identity (or 'gb id')");
     });
 
@@ -146,7 +150,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "login"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown command: 'login'");
+      expect(output).toContain("gb: 'login' is not a gb command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb auth login");
     });
 
@@ -154,7 +159,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "check"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown command: 'check'");
+      expect(output).toContain("gb: 'check' is not a gb command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb security check");
     });
 
@@ -162,7 +168,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "sync"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown command: 'sync'");
+      expect(output).toContain("gb: 'sync' is not a gb command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb ide sync");
     });
 
@@ -170,7 +177,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "id", "lst"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown subcommand for 'gb id': 'lst'");
+      expect(output).toContain("gb: 'lst' is not a gb id command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb id list (or 'gb id ls')");
     });
 
@@ -178,7 +186,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "repo", "sett"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown subcommand for 'gb repo': 'sett'");
+      expect(output).toContain("gb: 'sett' is not a gb repo command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb repo set");
     });
 
@@ -186,7 +195,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "security", "chek"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown subcommand for 'gb security': 'chek'");
+      expect(output).toContain("gb: 'chek' is not a gb security command.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb security check");
     });
 
@@ -194,7 +204,8 @@ describe("Enhanced CLI Help & Suggestions Integration", () => {
       const res = await runCmd("bun", [GB_BIN, "--verison"]);
       expect(res.exitCode).toBe(1);
       const output = res.stdout + res.stderr;
-      expect(output).toContain("✖️  Unknown option: '--verison'");
+      expect(output).toContain("gb: unknown option '--verison'.");
+      expect(output).toContain("The most similar option is:");
       expect(output).toContain("--version");
     });
   });

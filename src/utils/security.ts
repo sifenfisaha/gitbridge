@@ -4,12 +4,13 @@ import child_process from "node:child_process";
 
 /**
  * Safely masks sensitive tokens, passwords, and private keys for console and log output.
- * Example: secret_token_value_example -> secr...mple
+ * Guarantees that short secrets are never exposed via overlapping prefixes/suffixes.
+ * Example: sample_secure_token_value_here -> samp...here
  */
 export function redactSecret(secret: string): string {
   if (!secret || typeof secret !== "string") return "";
   const trimmed = secret.trim();
-  if (trimmed.length <= 8) {
+  if (trimmed.length < 16) {
     return "********";
   }
   const prefix = trimmed.slice(0, 7);
@@ -18,13 +19,22 @@ export function redactSecret(secret: string): string {
 }
 
 /**
- * Sanitizes input strings to prevent CRLF injection and malicious directive injection
+ * Sanitizes input strings to prevent CRLF injection and control character injection
  * into SSH config and Git config files.
  */
 export function sanitizeConfigString(val: string): string {
   if (!val || typeof val !== "string") return "";
-  // Strip carriage returns, newlines, null bytes, and dangerous command characters
-  return val.replace(/[\r\n\0]/g, "").trim();
+  // Strip carriage returns, newlines, null bytes, and non-printable control characters
+  return val.replace(/[\r\n\0\x00-\x1F\x7F]/g, "").trim();
+}
+
+/**
+ * Sanitizes SSH key paths to prevent shell command execution or argument injection.
+ */
+export function sanitizeSshKeyPath(pathStr: string): string {
+  if (!pathStr || typeof pathStr !== "string") return "";
+  const cleaned = sanitizeConfigString(pathStr);
+  return cleaned.replace(/["'`$\\;&|><]/g, "");
 }
 
 /**

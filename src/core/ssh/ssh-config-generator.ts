@@ -40,7 +40,7 @@ export class SshConfigGenerator {
         if (account.sshPort && typeof account.sshPort === "number" && account.sshPort > 0 && account.sshPort < 65536) {
           content += `    Port ${account.sshPort}\n`;
         }
-        content += `    IdentityFile ${keyPath}\n`;
+        content += `    IdentityFile "${keyPath}"\n`;
         content += `    IdentitiesOnly yes\n\n`;
       }
     }

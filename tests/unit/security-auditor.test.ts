@@ -71,4 +71,21 @@ describe("SecurityAuditor & Commands Unit Tests", () => {
     // Run security scan on directory
     await handleSecurityScan(tempDir);
   });
+
+  it("detects untrusted working tree .gitbridge.json and configuration integrity issues", () => {
+    const rootConfig = path.join(tempDir, ".gitbridge.json");
+    fs.writeFileSync(rootConfig, JSON.stringify({ identityId: "hacked" }), "utf-8");
+
+    const issues = auditor.auditUntrustedRepoConfig(tempDir);
+    expect(issues.length).toBe(1);
+    expect(issues[0]).toContain("Working-tree root '.gitbridge.json' found");
+
+    fs.unlinkSync(rootConfig);
+    expect(auditor.auditUntrustedRepoConfig(tempDir).length).toBe(0);
+
+    // Config integrity check
+    const integrityIssues = auditor.auditConfigIntegrity();
+    expect(Array.isArray(integrityIssues)).toBe(true);
+    expect(integrityIssues.length).toBe(0);
+  });
 });

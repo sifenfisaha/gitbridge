@@ -10,13 +10,16 @@ export class WindowsCredentialStore implements CredentialStore {
   }
 
   private targetName(service: string, account: string): string {
-    return `gitbridge:${service}:${account}`;
+    const safeService = service.replace(/[^a-zA-Z0-9._-]/g, "");
+    const safeAccount = account.replace(/[^a-zA-Z0-9._-]/g, "");
+    return `gitbridge:${safeService}:${safeAccount}`;
   }
 
   async set(service: string, account: string, secret: string): Promise<void> {
     const target = this.targetName(service, account);
+    const safeAccount = account.replace(/[^a-zA-Z0-9._-]/g, "");
     try {
-      await execProcess("cmdkey", [`/generic:${target}`, `/user:${account}`, `/pass:${secret}`]);
+      await execProcess("cmdkey", [`/generic:${target}`, `/user:${safeAccount}`, `/pass:${secret}`]);
     } catch (err: unknown) {
       throw new CredentialStoreError(
         `Failed to store credential in Windows Credential Manager: ${err instanceof Error ? err.message : String(err)}`
@@ -26,15 +29,18 @@ export class WindowsCredentialStore implements CredentialStore {
 
   async get(service: string, account: string): Promise<string | null> {
     const target = this.targetName(service, account);
+    const safeTarget = target.replace(/[^a-zA-Z0-9:._-]/g, "");
     try {
       const script = `
         Add-Type -AssemblyName System.Security
-        $target = "${target}"
+        $target = "${safeTarget}"
         $cred = [System.Net.CredentialCache]::DefaultCredentials
       `;
+      // Encode PowerShell script as UTF-16LE Base64 for safe execution
+      const encodedCmd = Buffer.from(script, "utf16le").toString("base64");
       const res = await execProcess(
         "powershell",
-        ["-NoProfile", "-NonInteractive", "-Command", script],
+        ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCmd],
         { allowFailure: true }
       );
 

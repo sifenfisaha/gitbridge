@@ -32,6 +32,7 @@ export function formatRootHelp(programName: string = "gitbridge", version: strin
     { name: "status", alias: "st", desc: "Show active identity, accounts, remotes, and routing rules" },
     { name: "context", alias: "ctx", desc: "Inspect Git and GitBridge identity context for current repo" },
     { name: "explain", desc: "Explain why GitBridge selected the current identity & configuration" },
+    { name: "suggest", alias: "next", desc: "Inspect repository and suggest recommended next actions" },
     { name: "current", alias: "cur", desc: "Print current Git author identity, email, or shell prompt badge" },
     { name: "switch", alias: "sw", args: "[id]", desc: "Quickly switch active Git identity (locally or --global)" },
     { name: "clone", args: "<url> [dir]", desc: "Smart clone with provider detection, account routing & binding" },
@@ -93,6 +94,7 @@ ${securityAndDiag.map((s) => renderRow(s)).join("\n")}
   ${header("OPTIONS")}
     ${pc.yellow("-V, --version")}             ${pc.white("Output the version number")}
     ${pc.yellow("-h, --help, -help")}         ${pc.white("Display this help message")}
+    ${pc.yellow("--no-prompt")}               ${pc.white("Disable interactive confirmation prompts on typos")}
 
   ${header("EXAMPLES")}
     ${pc.gray("$")} ${pc.cyan(`${programName} setup`)}                ${pc.gray("# Launch interactive onboarding wizard")}

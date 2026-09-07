@@ -12,6 +12,7 @@ import { execProcess } from "@/utils/proc";
 import { parseRemoteUrl } from "@/core/git/url-parser";
 import { promptSelect } from "../ui/prompts";
 import { logger } from "@/utils/logger";
+import { sanitizeSshKeyPath } from "@/utils/security";
 import type { GitProviderType, RepositoryRemote } from "@/core/config/schema";
 
 export interface CloneCommandOptions {
@@ -197,7 +198,8 @@ export async function handleCloneCommand(
   const selectedAccount = selectedAccountId ? accounts.find((a) => a.id === selectedAccountId) : undefined;
   const cloneEnv: Record<string, string> = {};
   if (selectedAccount?.sshKeyPath && fs.existsSync(selectedAccount.sshKeyPath)) {
-    cloneEnv.GIT_SSH_COMMAND = `ssh -i "${selectedAccount.sshKeyPath}" -o IdentitiesOnly=yes`;
+    const safeKey = sanitizeSshKeyPath(selectedAccount.sshKeyPath);
+    cloneEnv.GIT_SSH_COMMAND = `ssh -i "${safeKey}" -o IdentitiesOnly=yes`;
   }
 
   const result = await execProcess("git", args, { env: cloneEnv });

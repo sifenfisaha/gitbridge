@@ -34,6 +34,11 @@ const SECRET_PATTERNS: { type: string; description: string; regex: RegExp }[] = 
     regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{36,}\b/g,
   },
   {
+    type: "github_fine_grained_pat",
+    description: "GitHub Fine-Grained Personal Access Token",
+    regex: /\bgithub_pat_[a-zA-Z0-9_]{22,}\b/g,
+  },
+  {
     type: "gitlab_token",
     description: "GitLab Personal/OAuth Access Token",
     regex: /\b(?:glpat|gloas|glptt)-[a-zA-Z0-9_\-]{20,}\b/g,
@@ -47,6 +52,21 @@ const SECRET_PATTERNS: { type: string; description: string; regex: RegExp }[] = 
     type: "aws_access_key",
     description: "AWS Access Key ID",
     regex: /\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b/g,
+  },
+  {
+    type: "openai_key",
+    description: "OpenAI API / Project Key",
+    regex: /\bsk-(?:proj-)?[a-zA-Z0-9_\-]{32,}\b/g,
+  },
+  {
+    type: "anthropic_key",
+    description: "Anthropic API Key",
+    regex: /\bsk-ant-[a-zA-Z0-9_\-]{32,}\b/g,
+  },
+  {
+    type: "google_api_key",
+    description: "Google Cloud / AI API Key",
+    regex: /\bAIza[0-9A-Za-z\-_]{35}\b/g,
   },
   {
     type: "generic_secret",

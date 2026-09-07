@@ -105,6 +105,37 @@ export class SecurityAuditor {
 
     return { fixed, failed };
   }
+
+  auditUntrustedRepoConfig(repoPath: string): string[] {
+    const issues: string[] = [];
+    const rootConfig = path.join(repoPath, ".gitbridge.json");
+    if (fs.existsSync(rootConfig)) {
+      issues.push(
+        `Working-tree root '.gitbridge.json' found at ${rootConfig}. GitBridge strictly ignores committed root configs to prevent identity hijacking. Use '.git/gitbridge.json' or 'gb repo set' instead.`
+      );
+    }
+    return issues;
+  }
+
+  auditConfigIntegrity(): string[] {
+    const issues: string[] = [];
+    const paths = this.store.getPathResolver();
+    const mainGit = paths.getMainGitConfigFile();
+    if (fs.existsSync(mainGit)) {
+      const content = fs.readFileSync(mainGit, "utf-8");
+      if (/^\s*sshCommand\s*=/m.test(content) || /^\s*\[core\]/m.test(content)) {
+        issues.push("Detected unauthorized [core] directives or sshCommand in main.gitconfig");
+      }
+    }
+    const sshFile = paths.getGeneratedSshConfigFile();
+    if (fs.existsSync(sshFile)) {
+      const content = fs.readFileSync(sshFile, "utf-8");
+      if (/^\s*ProxyCommand\s+/mi.test(content) || /^\s*LocalCommand\s+/mi.test(content)) {
+        issues.push("Detected dangerous ProxyCommand/LocalCommand in generated ssh_config");
+      }
+    }
+    return issues;
+  }
 }
 
 export async function handleSecurityCheck(cwd: string = process.cwd(), store: ConfigStore = defaultConfigStore) {
@@ -199,9 +230,27 @@ export async function handleSecurityCheck(cwd: string = process.cwd(), store: Co
     console.log(`     ${pc.gray("○ Current directory is not a Git repository (skipped hooks check)")}`);
   }
 
+  // 6. Configuration Integrity & Repository Trust
+  console.log(pc.bold("\n  6. Configuration Integrity & Repository Trust"));
+  const configIssues = auditor.auditConfigIntegrity();
+  const repoTrustIssues = isRepo ? auditor.auditUntrustedRepoConfig((await git.getRepoRoot()) || cwd) : [];
+  const allIntegrityIssues = [...configIssues, ...repoTrustIssues];
+
+  if (allIntegrityIssues.length === 0) {
+    console.log(`     ${pc.green("✔")} Git & SSH generated configs verified free of injection vulnerabilities`);
+    if (isRepo) {
+      console.log(`     ${pc.green("✔")} Working-tree root is clean of untrusted configuration files`);
+    }
+  } else {
+    totalWarnings += allIntegrityIssues.length;
+    for (const issue of allIntegrityIssues) {
+      console.log(`     ${pc.yellow("⚠")} ${issue}`);
+    }
+  }
+
   console.log(pc.gray("\n  ──────────────────────────────────────────────────"));
   if (totalWarnings === 0) {
-    console.log(pc.bold(pc.green("  ✔ Security status: Fort Knox (All 5 security layers passing!)\n")));
+    console.log(pc.bold(pc.green("  ✔ Security status: Fort Knox (All 6 security layers passing!)\n")));
   } else {
     console.log(pc.bold(pc.yellow(`  ⚠ Security status: ${totalWarnings} recommendation(s) found. Run 'gb security fix' to auto-resolve.\n`)));
   }

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { ConfigStore } from "../config/config-store";
 import { expandTilde } from "@/utils/platform";
+import { sanitizeConfigString } from "@/utils/security";
 
 export class GitConfigGenerator {
   private store: ConfigStore;
@@ -28,13 +29,17 @@ export class GitConfigGenerator {
       const ruleIdentity = identities.find((i) => i.id === rule.identityId);
       const ruleFile = paths.getRuleGitConfigFile(rule.id);
 
-      let ruleContent = `# Managed by GitBridge for rule: ${rule.id}\n`;
+      const cleanRuleId = sanitizeConfigString(rule.id);
+      let ruleContent = `# Managed by GitBridge for rule: ${cleanRuleId}\n`;
       if (ruleIdentity) {
+        const cleanName = sanitizeConfigString(ruleIdentity.name);
+        const cleanEmail = sanitizeConfigString(ruleIdentity.email);
         ruleContent += `[user]\n`;
-        ruleContent += `    name = ${ruleIdentity.name}\n`;
-        ruleContent += `    email = ${ruleIdentity.email}\n`;
+        ruleContent += `    name = ${cleanName}\n`;
+        ruleContent += `    email = ${cleanEmail}\n`;
         if (ruleIdentity.signingKey) {
-          ruleContent += `    signingkey = ${ruleIdentity.signingKey}\n`;
+          const cleanKey = sanitizeConfigString(ruleIdentity.signingKey);
+          ruleContent += `    signingkey = ${cleanKey}\n`;
           ruleContent += `    # format = ssh or gpg\n`;
         }
       }
@@ -43,13 +48,15 @@ export class GitConfigGenerator {
       if (rule.defaultAccountId) {
         const account = accounts.find((a) => a.id === rule.defaultAccountId);
         if (account && account.host) {
-          const aliasHost = `${account.host}-${account.id}`;
+          const cleanHost = sanitizeConfigString(account.host);
+          const cleanId = sanitizeConfigString(account.id);
+          const aliasHost = `${cleanHost}-${cleanId}`;
           ruleContent += `\n[url "git@${aliasHost}:"]\n`;
-          ruleContent += `    insteadOf = git@${account.host}:\n`;
+          ruleContent += `    insteadOf = git@${cleanHost}:\n`;
           if (account.sshPort && account.sshPort !== 22) {
-            ruleContent += `    insteadOf = ssh://git@${account.host}:${account.sshPort}/\n`;
+            ruleContent += `    insteadOf = ssh://git@${cleanHost}:${account.sshPort}/\n`;
           }
-          ruleContent += `    insteadOf = ssh://git@${account.host}/\n`;
+          ruleContent += `    insteadOf = ssh://git@${cleanHost}/\n`;
         }
       }
 
@@ -67,12 +74,15 @@ export class GitConfigGenerator {
     mainContent += `# Generated at: ${new Date().toISOString()}\n\n`;
 
     if (defaultIdentity) {
+      const cleanName = sanitizeConfigString(defaultIdentity.name);
+      const cleanEmail = sanitizeConfigString(defaultIdentity.email);
       mainContent += `# Default Identity\n`;
       mainContent += `[user]\n`;
-      mainContent += `    name = ${defaultIdentity.name}\n`;
-      mainContent += `    email = ${defaultIdentity.email}\n`;
+      mainContent += `    name = ${cleanName}\n`;
+      mainContent += `    email = ${cleanEmail}\n`;
       if (defaultIdentity.signingKey) {
-        mainContent += `    signingkey = ${defaultIdentity.signingKey}\n`;
+        const cleanKey = sanitizeConfigString(defaultIdentity.signingKey);
+        mainContent += `    signingkey = ${cleanKey}\n`;
       }
       mainContent += `\n`;
     }
@@ -87,7 +97,8 @@ export class GitConfigGenerator {
       mainContent += `# Directory-Based Conditional Includes\n`;
       for (const rule of config.rules) {
         const ruleFile = paths.getRuleGitConfigFile(rule.id);
-        const expandedRulePath = expandTilde(rule.path);
+        const cleanRulePath = sanitizeConfigString(rule.path);
+        const expandedRulePath = expandTilde(cleanRulePath);
         // gitdir format requires trailing slash for directories
         const gitDirPattern = expandedRulePath.endsWith("/") ? `${expandedRulePath}**` : `${expandedRulePath}/**`;
         mainContent += `[includeIf "gitdir:${gitDirPattern}"]\n`;

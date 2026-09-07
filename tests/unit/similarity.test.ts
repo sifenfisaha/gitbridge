@@ -8,6 +8,8 @@ import {
   formatCommandError,
   formatOptionError,
   normalizeArgv,
+  resolveCorrectedArgv,
+  formatArgvForDisplay,
   COMMAND_REGISTRY,
 } from "@/utils/similarity";
 
@@ -164,22 +166,54 @@ describe("Similarity & Command Suggestion Engine", () => {
   describe("formatCommandError & formatOptionError", () => {
     it("formats clean root error with suggested command and description", () => {
       const output = formatCommandError("statsu", "gb");
-      expect(output).toContain("✖️  Unknown command: 'statsu'");
+      expect(output).toContain("gb: 'statsu' is not a gb command. See 'gb --help'.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb status (or 'gb st')");
       expect(output).toContain("Run gb --help to see all available commands.");
     });
 
     it("formats clean subcommand error with parent context", () => {
       const output = formatCommandError("lst", "gb", "id");
-      expect(output).toContain("✖️  Unknown subcommand for 'gb id': 'lst'");
+      expect(output).toContain("gb: 'lst' is not a gb id command. See 'gb id --help'.");
+      expect(output).toContain("The most similar command is:");
       expect(output).toContain("gb id list (or 'gb id ls')");
       expect(output).toContain("Run gb id --help to see all available subcommands.");
     });
 
     it("formats option suggestions for typos like --verison", () => {
       const output = formatOptionError("--verison", "gb");
-      expect(output).toContain("✖️  Unknown option: '--verison'");
+      expect(output).toContain("gb: unknown option '--verison'. See 'gb --help'.");
+      expect(output).toContain("The most similar option is:");
       expect(output).toContain("--version");
+    });
+  });
+
+  describe("resolveCorrectedArgv & formatArgvForDisplay", () => {
+    it("replaces root command typo while preserving trailing options", () => {
+      const top = findCommandSuggestions("statsu")[0];
+      const corrected = resolveCorrectedArgv(["bun", "gb.ts", "statsu", "--json"], "statsu", top);
+      expect(corrected).toEqual(["bun", "gb.ts", "status", "--json"]);
+      expect(formatArgvForDisplay(corrected, "gb")).toBe("gb status --json");
+    });
+
+    it("expands root-level subcommand to full parent command", () => {
+      const top = findCommandSuggestions("login")[0];
+      const corrected = resolveCorrectedArgv(["bun", "gb.ts", "login", "--token", "abc"], "login", top);
+      expect(corrected).toEqual(["bun", "gb.ts", "auth", "login", "--token", "abc"]);
+      expect(formatArgvForDisplay(corrected, "gb")).toBe("gb auth login --token abc");
+    });
+
+    it("replaces subcommand typo in-place", () => {
+      const top = findCommandSuggestions("lst", "id")[0];
+      const corrected = resolveCorrectedArgv(["node", "gb", "id", "lst"], "lst", top);
+      expect(corrected).toEqual(["node", "gb", "id", "list"]);
+      expect(formatArgvForDisplay(corrected, "gb")).toBe("gb id list");
+    });
+
+    it("replaces option typo in-place", () => {
+      const corrected = resolveCorrectedArgv(["gb", "status", "--verison"], "--verison", "--version");
+      expect(corrected).toEqual(["gb", "status", "--version"]);
+      expect(formatArgvForDisplay(corrected, "gb")).toBe("gb status --version");
     });
   });
 
@@ -214,6 +248,7 @@ describe("Similarity & Command Suggestion Engine", () => {
       expect(names).toContain("status");
       expect(names).toContain("context");
       expect(names).toContain("explain");
+      expect(names).toContain("suggest");
       expect(names).toContain("current");
       expect(names).toContain("switch");
       expect(names).toContain("clone");

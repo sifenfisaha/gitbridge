@@ -92,6 +92,7 @@ export const COMMAND_REGISTRY: CommandEntry[] = [
   { name: "status", alias: "st", desc: "Show overall GitBridge status, active identities, accounts, and rules" },
   { name: "context", alias: "ctx", desc: "Inspect Git and GitBridge identity context for current repo" },
   { name: "explain", desc: "Explain why GitBridge selected the current identity & configuration" },
+  { name: "suggest", alias: "next", desc: "Inspect repository and suggest recommended next actions" },
   { name: "current", alias: "cur", desc: "Print current Git author identity, email, or shell prompt badge" },
   { name: "switch", alias: "sw", desc: "Quickly switch active Git identity (locally or --global)" },
   { name: "clone", desc: "Smart clone with provider detection, account routing, and identity setup" },
@@ -324,9 +325,9 @@ export function formatCommandError(
   const lines: string[] = [];
 
   if (parentCommandName) {
-    lines.push(pc.red(`✖️  Unknown subcommand for '${programName} ${parentCommandName}': `) + pc.yellow(`'${input}'`));
+    lines.push(pc.red(`${programName}: '${input}' is not a ${programName} ${parentCommandName} command. See '${programName} ${parentCommandName} --help'.`));
   } else {
-    lines.push(pc.red(`✖️  Unknown command: `) + pc.yellow(`'${input}'`));
+    lines.push(pc.red(`${programName}: '${input}' is not a ${programName} command. See '${programName} --help'.`));
   }
 
   lines.push("");
@@ -335,7 +336,7 @@ export function formatCommandError(
     const top = suggestions[0];
 
     if (suggestions.length === 1 || top.score >= 0.85) {
-      lines.push(pc.bold(pc.yellow("Did you mean:")));
+      lines.push(pc.bold(pc.yellow("The most similar command is:")));
       let cmdStr: string;
       if (parentCommandName) {
         cmdStr = `${programName} ${parentCommandName} ${top.command}`;
@@ -351,7 +352,7 @@ export function formatCommandError(
       lines.push(`  ${pc.cyan(cmdStr)}`);
       lines.push(`  ${pc.gray(top.desc)}`);
     } else {
-      lines.push(pc.bold(pc.yellow("Did you mean one of these?")));
+      lines.push(pc.bold(pc.yellow("The most similar commands are:")));
       const candidates = suggestions.slice(0, 4);
       for (const s of candidates) {
         const full = parentCommandName ? `${programName} ${parentCommandName} ${s.command}` : `${programName} ${s.fullCommand}`;
@@ -450,6 +451,7 @@ export const COMMON_OPTIONS = [
   "--json",
   "--prompt",
   "-p",
+  "--no-prompt",
   "--email",
   "-e",
   "--name",
@@ -493,18 +495,25 @@ export function formatOptionError(
     .sort((a, b) => b.score - a.score);
 
   const lines: string[] = [];
-  lines.push(pc.red(`✖️  Unknown option: `) + pc.yellow(`'${input}'`));
+  const target = parentCommandName ? `${programName} ${parentCommandName}` : programName;
+  lines.push(pc.red(`${programName}: unknown option '${input}'. See '${target} --help'.`));
   lines.push("");
 
   if (ranked.length > 0) {
-    lines.push(pc.bold(pc.yellow("Did you mean:")));
-    lines.push(`  ${pc.cyan(ranked[0].opt)}`);
+    if (ranked.length === 1 || ranked[0].score >= 0.85) {
+      lines.push(pc.bold(pc.yellow("The most similar option is:")));
+      lines.push(`  ${pc.cyan(ranked[0].opt)}`);
+    } else {
+      lines.push(pc.bold(pc.yellow("The most similar options are:")));
+      for (const r of ranked.slice(0, 3)) {
+        lines.push(`  ${pc.cyan(r.opt)}`);
+      }
+    }
   } else {
     lines.push(pc.gray(`No similar options found.`));
   }
 
   lines.push("");
-  const target = parentCommandName ? `${programName} ${parentCommandName}` : programName;
   lines.push(pc.gray(`Run `) + pc.cyan(`${target} --help`) + pc.gray(` to see all available options.`));
 
   return lines.join("\n");
@@ -515,4 +524,74 @@ export function formatOptionError(
  */
 export function normalizeArgv(argv: string[]): string[] {
   return argv.map((arg) => (arg === "-help" ? "--help" : arg));
+}
+
+/**
+ * Returns the highest scoring suggestion for an input command/subcommand.
+ */
+export function getTopSuggestion(
+  input: string,
+  parentCommandName?: string,
+  threshold = 0.45
+): Suggestion | undefined {
+  const suggestions = findCommandSuggestions(input, parentCommandName, threshold);
+  return suggestions.length > 0 ? suggestions[0] : undefined;
+}
+
+/**
+ * Returns the highest scoring suggestion for an unknown option.
+ */
+export function getTopOptionSuggestion(input: string, threshold = 0.5): string | undefined {
+  const normalized = input.toLowerCase().trim();
+  const ranked = COMMON_OPTIONS.map((opt) => ({
+    opt,
+    score: scoreSimilarity(normalized, opt),
+  }))
+    .filter((o) => o.score >= threshold)
+    .sort((a, b) => b.score - a.score);
+
+  return ranked.length > 0 ? ranked[0].opt : undefined;
+}
+
+/**
+ * Replaces the erroneous token in argv with the corrected command tokens.
+ */
+export function resolveCorrectedArgv(
+  argv: string[],
+  unknownToken: string,
+  suggestion: Suggestion | string
+): string[] {
+  const result = [...argv];
+  const idx = result.lastIndexOf(unknownToken);
+  if (idx === -1) return result;
+
+  if (typeof suggestion === "string") {
+    result.splice(idx, 1, suggestion);
+    return result;
+  }
+
+  if (suggestion.isSubcommandOfParent && suggestion.fullCommand.includes(" ")) {
+    const parts = suggestion.fullCommand.split(" ");
+    result.splice(idx, 1, ...parts);
+  } else {
+    result.splice(idx, 1, suggestion.command);
+  }
+
+  return result;
+}
+
+/**
+ * Formats an argv array into a clean, displayable command string for the user prompt.
+ */
+export function formatArgvForDisplay(argv: string[], programName = "gb"): string {
+  let startIdx = 2;
+  for (let i = 0; i < Math.min(argv.length, 3); i++) {
+    const a = argv[i].toLowerCase();
+    if (a.endsWith(".ts") || a.endsWith(".js") || a === "gb" || a === "gitbridge") {
+      startIdx = i + 1;
+      break;
+    }
+  }
+  const userArgs = argv.slice(startIdx);
+  return `${programName} ${userArgs.join(" ")}`.trim();
 }

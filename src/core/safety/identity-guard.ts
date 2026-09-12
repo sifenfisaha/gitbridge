@@ -14,6 +14,87 @@ export interface GuardCheckResult {
   remoteViolations?: RemoteCredentialViolation[];
 }
 
+/**
+ * Strips the GitBridge-injected script block from a hook file's content.
+ * Detects the block via its header comment and scans to find the end of the
+ * block (the `exec` line), leaving any other user-added content intact.
+ */
+function stripGitBridgeHookScript(content: string, hookType: "pre-commit" | "pre-push"): string {
+  const lines = content.split("\n");
+  const headerComment = hookType === "pre-commit"
+    ? "# GitBridge Pre-Commit Identity Guard"
+    : "# GitBridge Pre-Push Identity";
+
+  // Markers that identify lines belonging to the GitBridge hook block
+  const blockMarkers = [
+    "GitBridge",
+    "GITBRIDGE",
+    "gitbridge hook",
+    "gb hook",
+    "command -v gitbridge",
+    "command -v gb",
+    'GB="',
+    "exec \"$GB\"",
+    "exec '$GB'",
+  ];
+
+  let blockStart = -1;
+  let blockEnd = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (blockStart === -1 && lines[i].includes(headerComment)) {
+      blockStart = i;
+      blockEnd = i;
+      continue;
+    }
+    // Once inside the block, keep extending blockEnd for any line that's
+    // part of the GitBridge script (comments, control flow, exec)
+    if (blockStart !== -1 && blockEnd !== -1) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      const isBlockLine =
+        blockMarkers.some((m) => line.includes(m)) ||
+        trimmed === "fi" ||
+        trimmed === "else" ||
+        trimmed.startsWith("if ") ||
+        trimmed.startsWith("elif ") ||
+        trimmed.startsWith("exit ") ||
+        trimmed.startsWith("echo ") ||
+        trimmed === "";
+      if (isBlockLine) {
+        blockEnd = i;
+      } else {
+        // We've left the block
+        break;
+      }
+    }
+  }
+
+  if (blockStart === -1 || blockEnd === -1) {
+    // Fallback: filter out lines referencing gitbridge
+    return lines
+      .filter(
+        (l) =>
+          !l.includes("GitBridge") &&
+          !l.includes("gitbridge hook") &&
+          !l.includes("gb hook") &&
+          !l.includes("command -v gitbridge") &&
+          !l.includes("command -v gb") &&
+          !l.includes("GITBRIDGE")
+      )
+      .join("\n");
+  }
+
+  // Consume any trailing blank lines after the block
+  while (blockEnd + 1 < lines.length && lines[blockEnd + 1].trim() === "") {
+    blockEnd++;
+  }
+
+  const before = lines.slice(0, blockStart);
+  const after = lines.slice(blockEnd + 1);
+  return [...before, ...after].join("\n");
+}
+
 export class IdentityGuard {
   private store: ConfigStore;
   private resolver: IdentityResolver;
@@ -127,11 +208,21 @@ export class IdentityGuard {
     const hookFile = path.join(hooksDir, "pre-commit");
     const hookScript = `#!/usr/bin/env bash
 # GitBridge Pre-Commit Identity Guard & Secret Scanner
-if command -v gitbridge >/dev/null 2>&1; then
-    gitbridge hook pre-commit
-elif command -v gb >/dev/null 2>&1; then
-    gb hook pre-commit
+if [ "\${GITBRIDGE_HOOK_BYPASS:-}" = "1" ]; then
+    exit 0
 fi
+GB=""
+if command -v gitbridge >/dev/null 2>&1; then
+    GB="$(command -v gitbridge)"
+elif command -v gb >/dev/null 2>&1; then
+    GB="$(command -v gb)"
+else
+    echo "GitBridge: gitbridge CLI not found on PATH; refusing to commit." >&2
+    echo "Install GitBridge or set GITBRIDGE_HOOK_BYPASS=1 to skip (unsafe)." >&2
+    exit 1
+fi
+# gitbridge hook pre-commit
+exec "$GB" hook pre-commit
 `;
 
     if (fs.existsSync(hookFile)) {
@@ -141,6 +232,11 @@ fi
       }
     } else {
       fs.writeFileSync(hookFile, hookScript, { encoding: "utf-8", mode: 0o755 });
+    }
+    try {
+      fs.chmodSync(hookFile, 0o755);
+    } catch {
+      // ignore on Windows
     }
 
     return true;
@@ -159,11 +255,21 @@ fi
     const hookFile = path.join(hooksDir, "pre-push");
     const hookScript = `#!/usr/bin/env bash
 # GitBridge Pre-Push Identity & Safety Guard
-if command -v gitbridge >/dev/null 2>&1; then
-    gitbridge hook pre-push
-elif command -v gb >/dev/null 2>&1; then
-    gb hook pre-push
+if [ "\${GITBRIDGE_HOOK_BYPASS:-}" = "1" ]; then
+    exit 0
 fi
+GB=""
+if command -v gitbridge >/dev/null 2>&1; then
+    GB="$(command -v gitbridge)"
+elif command -v gb >/dev/null 2>&1; then
+    GB="$(command -v gb)"
+else
+    echo "GitBridge: gitbridge CLI not found on PATH; refusing to push." >&2
+    echo "Install GitBridge or set GITBRIDGE_HOOK_BYPASS=1 to skip (unsafe)." >&2
+    exit 1
+fi
+# gitbridge hook pre-push
+exec "$GB" hook pre-push
 `;
 
     if (fs.existsSync(hookFile)) {
@@ -173,6 +279,11 @@ fi
       }
     } else {
       fs.writeFileSync(hookFile, hookScript, { encoding: "utf-8", mode: 0o755 });
+    }
+    try {
+      fs.chmodSync(hookFile, 0o755);
+    } catch {
+      // ignore on Windows
     }
 
     return true;
@@ -188,36 +299,14 @@ fi
 
     const content = fs.readFileSync(hookFile, "utf-8");
     if (content.includes("gitbridge hook pre-commit") || content.includes("gb hook pre-commit")) {
-      const nonCommentLines = content
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0 && !l.startsWith("#"));
-
-      const isOnlyGitBridge = nonCommentLines.every(
-        (l) =>
-          l.startsWith("if ") ||
-          l.startsWith("elif ") ||
-          l === "fi" ||
-          l.includes("gitbridge") ||
-          l.includes("gb hook")
-      );
-
-      if (isOnlyGitBridge) {
+      const remaining = stripGitBridgeHookScript(content, "pre-commit");
+      if (!remaining.trim() || remaining.trim() === "#!/usr/bin/env bash") {
         fs.unlinkSync(hookFile);
       } else {
-        const filtered = content
-          .split("\n")
-          .filter(
-            (l) =>
-              !l.includes("GitBridge") &&
-              !l.includes("gitbridge hook") &&
-              !l.includes("gb hook") &&
-              !l.includes("command -v gitbridge") &&
-              !l.includes("command -v gb")
-          )
-          .join("\n")
-          .trim();
-        fs.writeFileSync(hookFile, `${filtered}\n`, { encoding: "utf-8", mode: 0o755 });
+        fs.writeFileSync(hookFile, remaining.endsWith("\n") ? remaining : `${remaining}\n`, {
+          encoding: "utf-8",
+          mode: 0o755,
+        });
       }
     }
 
@@ -244,7 +333,13 @@ fi
           l.startsWith("if ") ||
           l.startsWith("elif ") ||
           l === "fi" ||
+          l === "else" ||
+          l.startsWith("GB=") ||
+          l.startsWith("exit ") ||
+          l.startsWith("echo ") ||
+          l.startsWith("exec ") ||
           l.includes("gitbridge") ||
+          l.includes("GITBRIDGE") ||
           l.includes("gb hook")
       );
 
@@ -259,7 +354,8 @@ fi
               !l.includes("gitbridge hook") &&
               !l.includes("gb hook") &&
               !l.includes("command -v gitbridge") &&
-              !l.includes("command -v gb")
+              !l.includes("command -v gb") &&
+              !l.includes("GITBRIDGE")
           )
           .join("\n")
           .trim();

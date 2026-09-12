@@ -1,6 +1,7 @@
 import { ConfigStore, defaultConfigStore } from "@/core/config/config-store";
 import { StoreFactory } from "@/core/storage/store-factory";
 import { IdentityResolver } from "@/core/identity/identity-resolver";
+import { hostsEqual } from "@/utils/hosts";
 
 export interface GitCredentialPayload {
   protocol?: string;
@@ -44,28 +45,42 @@ export class GitCredentialHelperHandler {
   async handleGet(input: string, cwd: string = process.cwd()): Promise<string> {
     const payload = parseGitCredentialInput(input);
     if (!payload.host) return "";
+    const requestedHost = payload.host;
+    // Never emit secrets for cleartext HTTP.
+    if (payload.protocol && payload.protocol !== "https") return "";
 
     const accounts = this.store.loadAccounts();
     const config = this.store.loadConfig();
 
     if (!config.enabled) return "";
 
-    // 1. Resolve context for cwd
+    const hostAccounts = accounts.filter((a) => hostsEqual(a.host, requestedHost));
+    if (hostAccounts.length === 0) return "";
+
     const ctx = await this.resolver.resolve(cwd);
 
-    let targetAccount = ctx.account;
-
-    // 2. If no account in resolved context, find account by host and matching username or first for host
-    if (!targetAccount) {
-      if (payload.username) {
-        targetAccount = accounts.find((a) => a.host === payload.host && a.username === payload.username) || null;
-      }
-      if (!targetAccount) {
-        targetAccount = accounts.find((a) => a.host === payload.host) || null;
+    let targetAccount = null;
+    // Context account is only eligible if it is for THIS host.
+    if (ctx.account && hostsEqual(ctx.account.host, requestedHost)) {
+      if (!payload.username || payload.username === ctx.account.username) {
+        targetAccount = ctx.account;
       }
     }
 
-    if (!targetAccount) return "";
+    if (!targetAccount && payload.username) {
+      targetAccount = hostAccounts.find((a) => a.username === payload.username) || null;
+    }
+
+    // Do not guess among multiple accounts for the same host.
+    if (!targetAccount) {
+      if (hostAccounts.length === 1) {
+        targetAccount = hostAccounts[0];
+      } else {
+        return "";
+      }
+    }
+
+    if (!hostsEqual(targetAccount.host, requestedHost)) return "";
 
     const credStore = await StoreFactory.getStore(this.store.getPathResolver());
     let token = await credStore.get(targetAccount.host, targetAccount.id);
@@ -89,6 +104,7 @@ export class GitCredentialHelperHandler {
   async handleStore(input: string): Promise<void> {
     const payload = parseGitCredentialInput(input);
     if (!payload.host || !payload.username || !payload.password) return;
+    if (payload.protocol && payload.protocol !== "https") return;
 
     const credStore = await StoreFactory.getStore(this.store.getPathResolver());
     const accounts = this.store.loadAccounts();

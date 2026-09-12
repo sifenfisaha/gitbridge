@@ -53,7 +53,7 @@ export function execProcess(
     proc.on("close", (code) => {
       const exitCode = code ?? 0;
       if (exitCode !== 0 && !options.allowFailure) {
-        const msg = stderr.trim() || stdout.trim() || `${command} ${args.join(" ")} failed with code ${exitCode}`;
+        const msg = stderr.trim() || stdout.trim() || `${command} failed with code ${exitCode}`;
         const err = new Error(msg) as any;
         err.exitCode = exitCode;
         err.stderr = stderr.trim();

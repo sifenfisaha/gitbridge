@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import child_process from "node:child_process";
 
 /**
@@ -38,7 +39,59 @@ export function sanitizeSshKeyPath(pathStr: string): string {
 }
 
 /**
- * Retrieves a hardware-bound unique machine identifier for key derivation.
+ * Redact userinfo from a remote URL so PATs are never printed to the terminal.
+ * https://user:ghp_xxx@host/repo -> https://user:********@host/repo
+ */
+export function redactRemoteUrl(url: string): string {
+  if (!url || typeof url !== "string") return "";
+  return url.replace(/^(https?:\/\/)([^/@:]+)(:[^@]*)?@/i, (_m, proto: string, user: string, pass?: string) => {
+    if (pass) return `${proto}${user}:********@`;
+    return `${proto}********@`;
+  });
+}
+
+/** Host / account-id tokens allowed in SSH `Host` / `HostName` lines. */
+export function isSafeSshHostToken(value: string): boolean {
+  return typeof value === "string" && /^[A-Za-z0-9._-]+$/.test(value);
+}
+
+/** IdentityFile paths: no quotes, wildcards, or shell metacharacters. */
+export function isSafeSshIdentityFile(value: string): boolean {
+  if (!value || typeof value !== "string") return false;
+  const cleaned = sanitizeConfigString(value);
+  if (cleaned !== value.trim()) return false;
+  if (/["'`$\\;&|<>*?[\]]/.test(cleaned)) return false;
+  return cleaned.length > 0;
+}
+
+/** SSH key file basename (no path separators or traversal). */
+export function isSafeSshKeyBasename(name: string): boolean {
+  return typeof name === "string" && /^[A-Za-z0-9._-]+$/.test(name) && !name.includes("..");
+}
+
+/**
+ * Real git executable path embedded into shims. Basename must be git/git.exe
+ * and the path must not contain shell metacharacters.
+ */
+export function isSafeGitExecutablePath(filePath: string): boolean {
+  if (!filePath || typeof filePath !== "string") return false;
+  if (/[\0\r\n`$;&|<>!"]/.test(filePath)) return false;
+  const base = path.basename(filePath).toLowerCase();
+  return base === "git" || base === "git.exe";
+}
+
+export function unixSingleQuote(value: string): string {
+  // POSIX-safe: 'foo'"'"'bar'  →  foo'bar
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+/** Git config / includeIf path: strip quotes and brackets that can close sections. */
+export function sanitizeGitConfigPath(value: string): string {
+  return sanitizeConfigString(value).replace(/["[\]]/g, "");
+}
+
+/**
+ * Retrieves a machine fingerprint for vault key derivation (not a hardware secret).
  * Falls back gracefully to system info if restricted.
  */
 export function getMachineHardwareId(): string {

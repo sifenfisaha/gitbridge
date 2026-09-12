@@ -179,9 +179,26 @@ export class BitbucketProvider implements GitProvider {
       });
 
       if (res.status === 200 && res.data) {
+        let permission: "read" | "write" | "admin" = "read";
+        if (targetHost === "bitbucket.org") {
+          try {
+            const q = `repository.full_name="${owner}/${repo}"`;
+            const permRes = await requestJson<{ values?: Array<{ permission?: string }> }>(
+              `${api}/user/permissions/repositories?q=${encodeURIComponent(q)}`,
+              "GET",
+              undefined,
+              { headers: this.getAuthHeader(token) }
+            );
+            const raw = permRes.data.values?.[0]?.permission?.toLowerCase();
+            if (raw === "admin") permission = "admin";
+            else if (raw === "write") permission = "write";
+          } catch {
+            // Keep read if the permissions probe fails.
+          }
+        }
         return {
           hasAccess: true,
-          permission: "write",
+          permission,
           owner,
           repo,
         };

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
 [![Tests](https://img.shields.io/badge/tests-225%20passed-brightgreen.svg)](https://github.com/FuadTesfaye/gitbridge)
-[![Security](https://img.shields.io/badge/security-Fort%20Knox%20(6%20layers)-brightgreen.svg)](https://github.com/FuadTesfaye/gitbridge)
+[![Security](https://img.shields.io/badge/security-OS%20keyring%20%2B%20AES--256--GCM-blue.svg)](https://github.com/FuadTesfaye/gitbridge)
 [![Telemetry](https://img.shields.io/badge/telemetry-zero%20(100%25%20offline--first)-blueviolet.svg)](https://github.com/FuadTesfaye/gitbridge)
 
 > **GitBridge is a zero-wrapper Git context manager that automatically maps every repository to the correct author identity, provider account, authentication credentials, and SSH configuration while preserving your standard Git workflow.**
@@ -96,19 +96,19 @@ All GitBridge configuration is stored in your user profile under `~/.gitbridge` 
 | `~/.gitbridge/generated/rules/*.gitconfig` | `0600` | Per-directory compiled Git rules with `[user]` and `[url]` blocks |
 | `~/.gitbridge/backups/` | `0700` | Automated timestamped backups of `~/.gitconfig` and `~/.ssh/config` before any modification |
 
-### Hardware Keyring Integration
-Personal access tokens and OAuth secrets are **never stored in plaintext**. GitBridge saves them directly into your operating system's native secure credential manager:
-- **macOS**: Apple Keychain Services via `/usr/bin/security`
-- **Linux / BSD**: Secret Service API via `secret-tool` / FreeDesktop Keyring
-- **Windows**: Windows Credential Manager via DPAPI & `cmdkey`
-- **Universal Encrypted Vault Fallback**: If no system keyring daemon is available (headless servers, CI/CD, containers), GitBridge stores tokens in `~/.gitbridge/vault.enc` using authenticated **AES-256-GCM** encryption with keys derived via **PBKDF2-HMAC-SHA-256** (100,000 iterations) bound to your machine hardware ID.
+### Keyring Integration
+Personal access tokens and OAuth secrets are **never stored in plaintext** in GitBridge config files. They are saved in the OS credential manager when available:
+- **macOS**: Apple Keychain via `/usr/bin/security`
+- **Linux / BSD**: Secret Service API via `secret-tool` (secret on stdin)
+- **Windows**: Windows Credential Manager via `CredWrite`/`CredRead` (secret on stdin, not `cmdkey /pass`)
+- **Encrypted vault fallback**: If no system keyring is available, tokens go in `~/.gitbridge/vault.enc` using **AES-256-GCM** with **PBKDF2-HMAC-SHA-256** (100,000 iterations). The wrapping key is a machine fingerprint (hostname, user, home, machine-id) — it prevents casual copying to another machine, not a same-user attacker.
 
 ### Strict Defensive Hardening
-- **POSIX Permission Lockdown**: `~/.gitbridge` and subdirectories are created with `0700` (`rwx------`) permissions, and sensitive files are written atomically with mode `0600` (`rw-------`).
-- **CRLF Injection Immunity**: All user inputs (names, emails, keys, rule paths) are sanitized to strip carriage returns, line feeds, and control characters, preventing malicious section forging (`[core]\nsshCommand=...`) in `.gitconfig`.
-- **PowerShell Script Hardening**: Windows Credential Store calls use strict parameter filtering and UTF-16LE Base64 `-EncodedCommand` execution, eliminating command injection risks.
-- **Untrusted Repo Isolation**: GitBridge strictly ignores working tree `.gitbridge.json` files to prevent malicious third-party cloned repositories from hijacking developer commit identities.
-- **Zero Wrapper Overhead**: Standard `git commit` and `git push` run against native Git. Disabling GitBridge (`gb disable`) completely restores your original configuration from backup in 1 second.
+- **POSIX Permission Lockdown**: `~/.gitbridge` directories are `0700`, sensitive files are written atomically with mode `0600`.
+- **CRLF and token injection controls**: User inputs written into Git/SSH config are sanitized; SSH `Host`/`IdentityFile` values are allowlisted.
+- **Credential helper host matching**: Git only receives a PAT when the requested host matches the stored account. The helper is `!gitbridge credential` so native Git can invoke it.
+- **Untrusted Repo Isolation**: GitBridge ignores working-tree `.gitbridge.json` files so a cloned repo cannot hijack your commit identity.
+- **Zero Wrapper Overhead by default**: Standard `git commit` and `git push` run against native Git. `gb override` is opt-in.
 
 ---
 

@@ -78,7 +78,7 @@ export async function handleUpdateCommand(opts: UpdateOptions = {}): Promise<voi
 
   logger.info(`Installing update via npm...`);
 
-  const res = await execProcess("npm", ["install", "-g", `${packageName}@latest`], {
+  const res = await execProcess("npm", ["install", "-g", `${packageName}@${latestVersion}`], {
     allowFailure: true,
   });
 
@@ -88,13 +88,13 @@ export async function handleUpdateCommand(opts: UpdateOptions = {}): Promise<voi
     logger.warn(`Global installation returned exit code ${res.exitCode}.`);
     if (res.stderr.includes("EACCES") || res.stderr.includes("permission denied")) {
       console.log(pc.yellow(`\nPermission denied. Please run the update command with administrator privileges:`));
-      console.log(pc.cyan(`  sudo npm install -g ${packageName}@latest\n`));
+      console.log(pc.cyan(`  sudo npm install -g ${packageName}@${latestVersion}\n`));
     } else {
       if (res.stderr || res.stdout) {
         console.log(pc.gray(`  ${(res.stderr || res.stdout).trim()}`));
       }
       console.log(pc.yellow(`Try manually updating with:`));
-      console.log(pc.cyan(`  npm install -g ${packageName}@latest\n`));
+      console.log(pc.cyan(`  npm install -g ${packageName}@${latestVersion}\n`));
     }
   }
 }

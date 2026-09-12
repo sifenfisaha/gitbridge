@@ -5,6 +5,7 @@ import { ConfigStore, defaultConfigStore } from "../config/config-store";
 import { SshKeyDetector } from "../ssh/ssh-key-detector";
 import { parseRemoteUrl } from "../git/url-parser";
 import { getHomeDir } from "@/utils/platform";
+import { hostsEqual, textContainsHost } from "@/utils/hosts";
 import type { GitProviderType } from "../config/schema";
 
 export interface DetectedProviderSummary {
@@ -46,22 +47,22 @@ export class ProviderDetector {
     if (!parsed) {
       return { providerId: "custom", name: "Unknown", host: "", confidence: 0, isKnown: false };
     }
-    const host = parsed.host.toLowerCase();
-
-    // 1. Check known cloud providers
-    if (host === "github.com" || host.includes("github")) {
+    // 1. Check known cloud providers (exact / subdomain, never substring)
+    if (parsed.providerId === "github") {
       return { providerId: "github", name: "GitHub", host: parsed.host, confidence: 1.0, isKnown: true };
     }
-    if (host === "gitlab.com" || host.includes("gitlab")) {
+    if (parsed.providerId === "gitlab") {
       return { providerId: "gitlab", name: "GitLab", host: parsed.host, confidence: 1.0, isKnown: true };
     }
-    if (host === "bitbucket.org" || host.includes("bitbucket")) {
+    if (parsed.providerId === "bitbucket") {
       return { providerId: "bitbucket", name: "Bitbucket", host: parsed.host, confidence: 1.0, isKnown: true };
     }
 
     // 2. Check accounts already registered in GitBridge
     const accounts = this.store.loadAccounts();
-    const matchedAccount = accounts.find((a) => a.host.toLowerCase() === host || parsed.accountAlias === a.id);
+    const matchedAccount = accounts.find(
+      (a) => hostsEqual(a.host, parsed.host) || parsed.accountAlias === a.id
+    );
     if (matchedAccount) {
       return {
         providerId: matchedAccount.providerId,
@@ -72,7 +73,7 @@ export class ProviderDetector {
       };
     }
 
-    // 3. Check custom IP / self-hosted heuristic (e.g. 172.27.23.116 or enterprise domain)
+    // 3. Unknown / self-hosted host
     return {
       providerId: "custom",
       name: `Custom (${parsed.host})`,
@@ -112,14 +113,14 @@ export class ProviderDetector {
     const gitConfigFile = path.join(home, ".gitconfig");
     if (fs.existsSync(gitConfigFile)) {
       try {
-        const content = fs.readFileSync(gitConfigFile, "utf-8").toLowerCase();
-        if (content.includes("github.com") || content.includes("github")) {
+        const content = fs.readFileSync(gitConfigFile, "utf-8");
+        if (textContainsHost(content, "github.com")) {
           providerMap.get("github")!.sources.add("~/.gitconfig");
         }
-        if (content.includes("gitlab.com") || content.includes("gitlab") || content.includes("172.27.23.116") || content.includes("insa.gov.et")) {
+        if (textContainsHost(content, "gitlab.com")) {
           providerMap.get("gitlab")!.sources.add("~/.gitconfig");
         }
-        if (content.includes("bitbucket.org") || content.includes("bitbucket")) {
+        if (textContainsHost(content, "bitbucket.org") || textContainsHost(content, "bitbucket.com")) {
           providerMap.get("bitbucket")!.sources.add("~/.gitconfig");
         }
       } catch {
@@ -131,10 +132,12 @@ export class ProviderDetector {
     const sshConfigFile = path.join(home, ".ssh", "config");
     if (fs.existsSync(sshConfigFile)) {
       try {
-        const content = fs.readFileSync(sshConfigFile, "utf-8").toLowerCase();
-        if (content.includes("github.com")) providerMap.get("github")!.sources.add("~/.ssh/config");
-        if (content.includes("gitlab.com") || content.includes("172.27.23.116")) providerMap.get("gitlab")!.sources.add("~/.ssh/config");
-        if (content.includes("bitbucket.org")) providerMap.get("bitbucket")!.sources.add("~/.ssh/config");
+        const content = fs.readFileSync(sshConfigFile, "utf-8");
+        if (textContainsHost(content, "github.com")) providerMap.get("github")!.sources.add("~/.ssh/config");
+        if (textContainsHost(content, "gitlab.com")) providerMap.get("gitlab")!.sources.add("~/.ssh/config");
+        if (textContainsHost(content, "bitbucket.org") || textContainsHost(content, "bitbucket.com")) {
+          providerMap.get("bitbucket")!.sources.add("~/.ssh/config");
+        }
       } catch {
         // Ignored
       }
@@ -144,10 +147,12 @@ export class ProviderDetector {
     const gitCredsFile = path.join(home, ".git-credentials");
     if (fs.existsSync(gitCredsFile)) {
       try {
-        const content = fs.readFileSync(gitCredsFile, "utf-8").toLowerCase();
-        if (content.includes("github.com")) providerMap.get("github")!.sources.add("~/.git-credentials");
-        if (content.includes("gitlab.com") || content.includes("172.27.23.116")) providerMap.get("gitlab")!.sources.add("~/.git-credentials");
-        if (content.includes("bitbucket.org")) providerMap.get("bitbucket")!.sources.add("~/.git-credentials");
+        const content = fs.readFileSync(gitCredsFile, "utf-8");
+        if (textContainsHost(content, "github.com")) providerMap.get("github")!.sources.add("~/.git-credentials");
+        if (textContainsHost(content, "gitlab.com")) providerMap.get("gitlab")!.sources.add("~/.git-credentials");
+        if (textContainsHost(content, "bitbucket.org") || textContainsHost(content, "bitbucket.com")) {
+          providerMap.get("bitbucket")!.sources.add("~/.git-credentials");
+        }
       } catch {
         // Ignored
       }

@@ -17,17 +17,20 @@ export class MacOSKeychainCredentialStore implements CredentialStore {
 
   async set(service: string, account: string, secret: string): Promise<void> {
     try {
-      // First delete existing if any (-U updates or adds)
       await this.delete(service, account);
 
+      // Hex-encode so the raw secret is never a shell/argv-visible UTF-8 token
+      // in crash reports. `security -X` still takes argv; this is the least-bad
+      // CLI interface without a native Security.framework binding.
+      const hex = Buffer.from(secret, "utf8").toString("hex");
       await execProcess("security", [
         "add-generic-password",
         "-a",
         account,
         "-s",
         service,
-        "-w",
-        secret,
+        "-X",
+        hex,
         "-U",
       ]);
     } catch (err: unknown) {

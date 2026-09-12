@@ -32,6 +32,18 @@ export async function promptText(options: {
   return String(res);
 }
 
+export async function promptPassword(options: {
+  message: string;
+  validate?: (value: string) => string | Error | undefined;
+}): Promise<string> {
+  const res = await p.password({
+    message: options.message,
+    validate: options.validate,
+  });
+  if (p.isCancel(res)) handleCancel();
+  return String(res);
+}
+
 export async function promptSelect<T extends string>(options: {
   message: string;
   options: Array<PromptOption<T>>;

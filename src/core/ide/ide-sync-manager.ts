@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { ConfigStore, defaultConfigStore } from "../config/config-store";
 import { getHomeDir } from "@/utils/platform";
+import { parseJsonc } from "@/utils/jsonc";
 
 export interface IdeTarget {
   name: string;
@@ -95,14 +96,13 @@ export class IdeSyncManager {
 
     let settings: Record<string, any> = {};
     if (fs.existsSync(settingsFile)) {
-      try {
-        const content = fs.readFileSync(settingsFile, "utf-8").trim();
-        if (content) {
-          settings = JSON.parse(content);
+      const content = fs.readFileSync(settingsFile, "utf-8").trim();
+      if (content) {
+        const parsed = parseJsonc(content);
+        if (!parsed) {
+          return { success: false, modified: false };
         }
-      } catch {
-        // If JSON has comments or trailing commas, handle safely
-        settings = {};
+        settings = parsed;
       }
     }
 
@@ -138,13 +138,13 @@ export class IdeSyncManager {
     if (!fs.existsSync(settingsFile)) return { success: true, modified: false };
 
     let settings: Record<string, any> = {};
-    try {
-      const content = fs.readFileSync(settingsFile, "utf-8").trim();
-      if (!content) return { success: true, modified: false };
-      settings = JSON.parse(content);
-    } catch {
+    const content = fs.readFileSync(settingsFile, "utf-8").trim();
+    if (!content) return { success: true, modified: false };
+    const parsed = parseJsonc(content);
+    if (!parsed) {
       return { success: false, modified: false };
     }
+    settings = parsed;
 
     let modified = false;
     const shimsDir = this.store.getPathResolver().getShimsDir();

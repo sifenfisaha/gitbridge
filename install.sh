@@ -87,7 +87,7 @@ if $INSTALL_CMD; then
 else
     echo -e "   ${YELLOW}Retrying with global flags...${NC}"
     if [ "$RUNTIME" = "npm" ]; then
-        npm install -g @fuad24/gitbridge@latest --no-fund --no-audit || true
+        npm install -g @fuad24/gitbridge@latest || true
     fi
 fi
 

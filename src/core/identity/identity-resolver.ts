@@ -3,6 +3,7 @@ import path from "node:path";
 import { ConfigStore } from "../config/config-store";
 import { GitCli, type GitRemoteInfo } from "../git/git-cli";
 import { expandTilde } from "@/utils/platform";
+import { hostsEqual } from "@/utils/hosts";
 import { ProviderDetector } from "../providers/provider-detector";
 import { defaultProviderRegistry } from "../providers/provider-registry";
 import { RepoAccessDetector } from "../providers/repo-access-detector";
@@ -209,7 +210,8 @@ export class IdentityResolver {
           resolvedAccount = accounts.find((a) => a.id === parsed.accountAlias || a.username === parsed.accountAlias) || null;
         }
         if (!resolvedAccount) {
-          resolvedAccount = accounts.find((a) => a.host === parsed.host) || null;
+          const hostMatches = accounts.filter((a) => hostsEqual(a.host, parsed.host));
+          resolvedAccount = hostMatches.length === 1 ? hostMatches[0] : null;
         }
       }
     }

@@ -3,6 +3,7 @@ import path from "node:path";
 import { ConfigStore } from "../config/config-store";
 import { SshConfigGenerator } from "./ssh-config-generator";
 import { collapseTilde } from "@/utils/platform";
+import { replaceManagedBlock, removeManagedBlock } from "@/utils/managed-block";
 
 export const SSH_BLOCK_START = "# --- BEGIN GITBRIDGE MANAGED BLOCK ---";
 export const SSH_BLOCK_END = "# --- END GITBRIDGE MANAGED BLOCK ---";
@@ -68,10 +69,12 @@ export class SshInjector {
 
     let newContent: string;
 
-    if (originalContent.includes(SSH_BLOCK_START) && originalContent.includes(SSH_BLOCK_END)) {
-      const before = originalContent.substring(0, originalContent.indexOf(SSH_BLOCK_START));
-      const after = originalContent.substring(originalContent.indexOf(SSH_BLOCK_END) + SSH_BLOCK_END.length);
-      newContent = `${blockContent}\n\n${before.trim()}\n${after.trim()}`.trim() + "\n";
+    if (originalContent.includes(SSH_BLOCK_START)) {
+      const replaced = replaceManagedBlock(originalContent, SSH_BLOCK_START, SSH_BLOCK_END, `${blockContent}\n`);
+      if (!replaced.ok || replaced.content === undefined) {
+        return { success: false, backupPath };
+      }
+      newContent = replaced.content;
     } else {
       // Put Include block at the very top of SSH config so aliases have precedence
       newContent = `${blockContent}\n\n${originalContent.trim()}`.trim() + "\n";
@@ -88,15 +91,11 @@ export class SshInjector {
     const originalContent = fs.readFileSync(sshConfigFile, "utf-8");
     if (!originalContent.includes(SSH_BLOCK_START)) return true;
 
-    const before = originalContent.substring(0, originalContent.indexOf(SSH_BLOCK_START));
-    const after = originalContent.substring(originalContent.indexOf(SSH_BLOCK_END) + SSH_BLOCK_END.length);
-    const cleaned = `${before.trim()}\n${after.trim()}`.trim();
-
-    if (cleaned.length === 0) {
-      fs.writeFileSync(sshConfigFile, "", { encoding: "utf-8", mode: 0o600 });
-    } else {
-      fs.writeFileSync(sshConfigFile, `${cleaned}\n`, { encoding: "utf-8", mode: 0o600 });
+    const removed = removeManagedBlock(originalContent, SSH_BLOCK_START, SSH_BLOCK_END);
+    if (!removed.ok || removed.content === undefined) {
+      return false;
     }
+    fs.writeFileSync(sshConfigFile, removed.content, { encoding: "utf-8", mode: 0o600 });
 
     return true;
   }

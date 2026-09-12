@@ -118,6 +118,27 @@ export class BridgeService {
     return res;
   }
 
+  async loginWithToken(providerId: string, token: string, host?: string): Promise<void> {
+    const provider = defaultProviderRegistry.get(providerId);
+    if (!provider) throw new Error(`Unknown provider '${providerId}'.`);
+    const user = await provider.getUser(token, host);
+    const cleanHost = (host || provider.defaultHost).replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    const accountId = `${provider.id}_${user.username.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+    defaultProviderRegistry.enableProvider(provider.id, this.store);
+    this.store.addAccount({
+      id: accountId,
+      providerId: provider.id,
+      host: cleanHost,
+      username: user.username,
+      displayName: user.displayName || undefined,
+      email: user.email || undefined,
+      authType: "pat",
+    });
+    const credStore = await StoreFactory.getStore(this.store.getPathResolver());
+    await credStore.set(cleanHost, accountId, token);
+    this.sshGen.generate();
+  }
+
   async removeAccount(id: string): Promise<void> {
     const account = this.store.getAccount(id);
     if (account) {

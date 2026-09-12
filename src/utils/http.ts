@@ -2,6 +2,8 @@ export interface HttpRequestOptions {
   headers?: Record<string, string>;
   timeoutMs?: number;
   params?: Record<string, string | number | boolean | undefined>;
+  /** Allow cleartext HTTP. Default false — credentials must not go over HTTP. */
+  allowHttp?: boolean;
 }
 
 export async function requestJson<T>(
@@ -46,11 +48,17 @@ export async function requestJson<T>(
       }
     }
 
+    if (/^http:\/\//i.test(targetUrl) && !options.allowHttp && process.env.GITBRIDGE_ALLOW_HTTP !== "1") {
+      throw new Error(`Refusing cleartext HTTP request to ${url}. Use HTTPS or pass --insecure-http.`);
+    }
+
     const res = await fetch(targetUrl, {
       method,
       headers,
       body: serializedBody,
       signal: controller.signal,
+      // Do not follow redirects: Authorization headers would otherwise be sent to a new host.
+      redirect: "error",
     });
 
     clearTimeout(timeout);

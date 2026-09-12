@@ -3,6 +3,8 @@ import path from "node:path";
 import os from "node:os";
 import { ConfigStore, defaultConfigStore } from "../config/config-store";
 import { getHomeDir, collapseTilde, expandTilde } from "@/utils/platform";
+import { isSafeGitExecutablePath, unixSingleQuote } from "@/utils/security";
+import { replaceManagedBlock, removeManagedBlock } from "@/utils/managed-block";
 
 export const OVERRIDE_BLOCK_START = "# --- BEGIN GITBRIDGE OVERRIDE ---";
 export const OVERRIDE_BLOCK_END = "# --- END GITBRIDGE OVERRIDE ---";
@@ -109,7 +111,13 @@ export class GitOverrideManager {
   installShims(customRealGit?: string): { success: boolean; shimsDir: string } {
     this.store.ensureDirectories();
     const shimsDir = this.store.getPathResolver().getShimsDir();
-    const realGit = customRealGit || this.findRealGitPath() || (process.platform === "win32" ? "git.exe" : "/usr/bin/git");
+    const resolvedGit = customRealGit || this.findRealGitPath() || (process.platform === "win32" ? "git.exe" : "/usr/bin/git");
+    const realGit = isSafeGitExecutablePath(resolvedGit)
+      ? resolvedGit
+      : process.platform === "win32"
+        ? "git.exe"
+        : "/usr/bin/git";
+    const quotedUnixGit = unixSingleQuote(realGit);
 
     if (!fs.existsSync(shimsDir)) {
       fs.mkdirSync(shimsDir, { recursive: true, mode: 0o755 });
@@ -121,22 +129,25 @@ export class GitOverrideManager {
 # GitBridge Git Override Shim
 # Routes \`git\` commands through GitBridge while preserving 100% native git compatibility.
 
-if [ "$GITBRIDGE_OVERRIDE_BYPASS" = "1" ]; then
-    REAL_GIT="\${GITBRIDGE_REAL_GIT:-${realGit}}"
-    exec "$REAL_GIT" "$@"
+REAL_GIT=${quotedUnixGit}
+if [ -n "\${GITBRIDGE_REAL_GIT:-}" ]; then
+    REAL_GIT="\$GITBRIDGE_REAL_GIT"
+fi
+
+if [ "\${GITBRIDGE_OVERRIDE_BYPASS:-}" = "1" ]; then
+    exec "\$REAL_GIT" "\$@"
 fi
 
 GB_CONFIG_DIR="\${GITBRIDGE_HOME:-$HOME/.gitbridge}"
 if [ ! -f "$GB_CONFIG_DIR/override.active" ]; then
-    REAL_GIT="\${GITBRIDGE_REAL_GIT:-${realGit}}"
     exec "$REAL_GIT" "$@"
 fi
 
 GB_BIN=""
 if command -v gitbridge >/dev/null 2>&1; then
-    GB_BIN="gitbridge"
+    GB_BIN="$(command -v gitbridge)"
 elif command -v gb >/dev/null 2>&1; then
-    GB_BIN="gb"
+    GB_BIN="$(command -v gb)"
 elif [ -x "$HOME/.local/bin/gitbridge" ]; then
     GB_BIN="$HOME/.local/bin/gitbridge"
 elif [ -x "$HOME/.local/bin/gb" ]; then
@@ -150,7 +161,6 @@ fi
 if [ -n "$GB_BIN" ]; then
     exec "$GB_BIN" git-proxy "$@"
 else
-    REAL_GIT="\${GITBRIDGE_REAL_GIT:-${realGit}}"
     exec "$REAL_GIT" "$@"
 fi
 `;
@@ -200,7 +210,7 @@ git.exe %*
     const psShimContent = `# GitBridge Git Override Shim for PowerShell
 param([Parameter(ValueFromRemainingArguments = $true)]$args)
 
-$realGit = if ($env:GITBRIDGE_REAL_GIT) { $env:GITBRIDGE_REAL_GIT } else { "${realGit}" }
+$realGit = if ($env:GITBRIDGE_REAL_GIT -and ([IO.Path]::GetFileName($env:GITBRIDGE_REAL_GIT) -match '^git(\.exe)?$')) { $env:GITBRIDGE_REAL_GIT } else { '${realGit.replace(/'/g, "''")}' }
 
 if ($env:GITBRIDGE_OVERRIDE_BYPASS -eq "1") {
     & $realGit @args
@@ -371,10 +381,12 @@ if (Get-Command gitbridge -ErrorAction SilentlyContinue) {
         }
 
         let newContent: string;
-        if (originalContent.includes(OVERRIDE_BLOCK_START) && originalContent.includes(OVERRIDE_BLOCK_END)) {
-          const before = originalContent.substring(0, originalContent.indexOf(OVERRIDE_BLOCK_START));
-          const after = originalContent.substring(originalContent.indexOf(OVERRIDE_BLOCK_END) + OVERRIDE_BLOCK_END.length);
-          newContent = `${blockContent}\n\n${before.trim()}\n${after.trim()}`.trim() + "\n";
+        if (originalContent.includes(OVERRIDE_BLOCK_START)) {
+          const replaced = replaceManagedBlock(originalContent, OVERRIDE_BLOCK_START, OVERRIDE_BLOCK_END, `${blockContent}\n`);
+          if (!replaced.ok || replaced.content === undefined) {
+            continue;
+          }
+          newContent = replaced.content;
         } else {
           // Prepend block to the top so PATH takes precedence
           newContent = `${blockContent}\n\n${originalContent.trim()}`.trim() + "\n";
@@ -404,15 +416,9 @@ if (Get-Command gitbridge -ErrorAction SilentlyContinue) {
         const originalContent = fs.readFileSync(target.path, "utf-8");
         if (!originalContent.includes(OVERRIDE_BLOCK_START)) continue;
 
-        const before = originalContent.substring(0, originalContent.indexOf(OVERRIDE_BLOCK_START));
-        const after = originalContent.substring(originalContent.indexOf(OVERRIDE_BLOCK_END) + OVERRIDE_BLOCK_END.length);
-        const cleaned = `${before.trim()}\n${after.trim()}`.trim();
-
-        if (cleaned.length === 0) {
-          fs.writeFileSync(target.path, "", { encoding: "utf-8" });
-        } else {
-          fs.writeFileSync(target.path, `${cleaned}\n`, { encoding: "utf-8" });
-        }
+        const removed = removeManagedBlock(originalContent, OVERRIDE_BLOCK_START, OVERRIDE_BLOCK_END);
+        if (!removed.ok || removed.content === undefined) continue;
+        fs.writeFileSync(target.path, removed.content, { encoding: "utf-8" });
 
         modifiedFiles.push(target.path);
       } catch {

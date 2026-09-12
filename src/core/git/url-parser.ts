@@ -1,4 +1,5 @@
 import type { GitProviderType } from "../config/schema";
+import { detectCloudProviderFromHost, normalizeHost } from "@/utils/hosts";
 
 export interface ParsedRemoteUrl {
   rawUrl: string;
@@ -13,17 +14,18 @@ export interface ParsedRemoteUrl {
 }
 
 export function detectProviderType(host: string): GitProviderType {
-  const cleanHost = host.toLowerCase();
-  if (cleanHost.includes("github.com") || cleanHost === "github") {
-    return "github";
+  const cloud = detectCloudProviderFromHost(host);
+  if (cloud) return cloud;
+  const cleanHost = normalizeHost(host);
+  if (cleanHost === "codeberg.org" || cleanHost.endsWith(".codeberg.org")) {
+    return "gitea";
   }
-  if (cleanHost.includes("gitlab.com") || cleanHost === "gitlab") {
-    return "gitlab";
+  if (cleanHost === "gitea.com" || cleanHost.endsWith(".gitea.com") || cleanHost === "gitea") {
+    return "gitea";
   }
-  if (cleanHost.includes("bitbucket.org") || cleanHost === "bitbucket") {
-    return "bitbucket";
-  }
-  if (cleanHost.includes("gitea") || cleanHost.includes("codeberg")) {
+  // Self-hosted gitea.internal.lan — match a hostname label, not a substring of another domain.
+  const labels = cleanHost.split(".");
+  if (labels.includes("gitea") || labels.includes("codeberg")) {
     return "gitea";
   }
   return "custom";

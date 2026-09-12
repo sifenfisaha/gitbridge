@@ -1,5 +1,6 @@
 import { IdentityGuard } from "@/core/safety/identity-guard";
 import { defaultConfigStore } from "@/core/config/config-store";
+import { redactRemoteUrl } from "@/utils/security";
 import pc from "picocolors";
 
 export async function handleHookCommand(hookType: string) {
@@ -50,7 +51,7 @@ export async function handleHookCommand(hookType: string) {
       if (result.remoteViolations && result.remoteViolations.length > 0) {
         console.error(pc.yellow(`  ⚠ Found plaintext credentials embedded in Git remote URLs:`));
         for (const rv of result.remoteViolations) {
-          console.error(`    • Remote '${pc.cyan(rv.name)}': ${pc.gray(rv.url)}`);
+          console.error(`    • Remote '${pc.cyan(rv.name)}': ${pc.gray(redactRemoteUrl(rv.url))}`);
         }
         console.error(
           pc.gray("\n  Remediation: ") +

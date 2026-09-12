@@ -630,9 +630,8 @@ export class CommandsController implements vscode.Disposable {
 
     try {
       this.notifications.showInfo(`Connecting ${provider.label}...`);
-      const terminal = vscode.window.createTerminal("GitBridge Auth");
-      terminal.show();
-      terminal.sendText(`gitbridge auth login ${provider.value} --token "${token}"`);
+      await this.bridge.loginWithToken(provider.value, token);
+      this.notifications.showInfo(`Authenticated with ${provider.label}.`);
       this.triggerRefresh();
     } catch (err: unknown) {
       this.notifications.showError(err instanceof Error ? err.message : String(err));

@@ -147,6 +147,8 @@ describe("Providers Unit Tests", () => {
 
     it("starts device authorization flow", async () => {
       const originalFetch = globalThis.fetch;
+      const prevClient = process.env.GITBRIDGE_GITHUB_CLIENT_ID;
+      process.env.GITBRIDGE_GITHUB_CLIENT_ID = "Iv1.testclientid0000";
       try {
         globalThis.fetch = (async () => {
           return new Response(
@@ -166,11 +168,15 @@ describe("Providers Unit Tests", () => {
         expect(flow.userCode).toBe("ABCD-1234");
       } finally {
         globalThis.fetch = originalFetch;
+        if (prevClient === undefined) delete process.env.GITBRIDGE_GITHUB_CLIENT_ID;
+        else process.env.GITBRIDGE_GITHUB_CLIENT_ID = prevClient;
       }
     });
 
     it("polls device authorization flow and returns token", async () => {
       const originalFetch = globalThis.fetch;
+      const prevClient = process.env.GITBRIDGE_GITHUB_CLIENT_ID;
+      process.env.GITBRIDGE_GITHUB_CLIENT_ID = "Iv1.testclientid0000";
       try {
         globalThis.fetch = (async () => {
           return new Response(
@@ -185,6 +191,8 @@ describe("Providers Unit Tests", () => {
         expect(res.token).toBe("gho_sampletoken12345");
       } finally {
         globalThis.fetch = originalFetch;
+        if (prevClient === undefined) delete process.env.GITBRIDGE_GITHUB_CLIENT_ID;
+        else process.env.GITBRIDGE_GITHUB_CLIENT_ID = prevClient;
       }
     });
   });
@@ -351,7 +359,7 @@ describe("Providers Unit Tests", () => {
 
         const check = await provider.checkRepoAccess("token", "myworkspace", "myrepo");
         expect(check.hasAccess).toBe(true);
-        expect(check.permission).toBe("write");
+        expect(check.permission).toBe("read");
 
         const notFound = await provider.checkRepoAccess("token", "myworkspace", "nonexistent");
         expect(notFound.hasAccess).toBe(false);

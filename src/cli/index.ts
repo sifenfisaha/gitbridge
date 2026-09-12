@@ -379,6 +379,7 @@ export function createProgram(name = "gitbridge"): Command {
     .option("-p, --password <password>", "Password for credentials login")
     .option("--host <host>", "Custom host for enterprise/self-hosted instances")
     .option("--ssh-key <path>", "Path to SSH private key to associate")
+    .option("--insecure-http", "Allow cleartext HTTP for self-hosted hosts (credentials will be sent in the clear)")
     .action((prov, opts) => handleAuthLogin(prov, opts));
   authCmd
     .command("logout <provider> [username]")

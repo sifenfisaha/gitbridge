@@ -63,21 +63,31 @@ export class EncryptedVaultCredentialStore implements CredentialStore {
       return {};
     }
 
-    try {
-      const buffer = fs.readFileSync(file);
-      if (buffer.length < 16 + 12 + 16) {
-        return {};
-      }
-
-      // Try current hardware-bound derivation
-      try {
-        return this.decryptBuffer(buffer, false);
-      } catch {
-        // Fallback to legacy derivation for backward compatibility
-        return this.decryptBuffer(buffer, true);
-      }
-    } catch {
+    const buffer = fs.readFileSync(file);
+    if (buffer.length === 0) {
       return {};
+    }
+    if (buffer.length < 16 + 12 + 16) {
+      throw new CredentialStoreError("Encrypted vault is truncated or corrupt; refusing to overwrite");
+    }
+
+    try {
+      return this.decryptBuffer(buffer, false);
+    } catch {
+      try {
+        const legacy = this.decryptBuffer(buffer, true);
+        // Migrate off the weaker hostname+user+home key on next successful read.
+        try {
+          this.writeVault(legacy);
+        } catch {
+          // still return decrypted data even if rewrite fails
+        }
+        return legacy;
+      } catch {
+        throw new CredentialStoreError(
+          "Encrypted vault cannot be decrypted with this machine key; refusing to overwrite stored credentials"
+        );
+      }
     }
   }
 
@@ -101,7 +111,7 @@ export class EncryptedVaultCredentialStore implements CredentialStore {
       // Combine: [salt][iv][tag][ciphertext]
       const payload = Buffer.concat([salt, iv, tag, ciphertext]);
 
-      const tempFile = `${file}.tmp.${Date.now()}`;
+      const tempFile = `${file}.tmp.${Date.now()}.${crypto.randomBytes(4).toString("hex")}`;
       fs.writeFileSync(tempFile, payload, { mode: 0o600 });
       fs.renameSync(tempFile, file);
       // Enforce strict 0600

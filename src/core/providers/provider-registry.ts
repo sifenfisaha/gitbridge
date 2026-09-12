@@ -4,6 +4,7 @@ import { GitHubProvider } from "./github.provider";
 import { GitLabProvider } from "./gitlab.provider";
 import { BitbucketProvider } from "./bitbucket.provider";
 import { ConfigStore, defaultConfigStore } from "../config/config-store";
+import { detectCloudProviderFromHost, normalizeHost } from "@/utils/hosts";
 
 export class ProviderRegistry {
   private providers = new Map<string, GitProvider>();
@@ -23,17 +24,9 @@ export class ProviderRegistry {
   }
 
   getByHost(host: string): GitProvider | undefined {
-    const clean = host.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    if (clean.includes("github.com") || clean.startsWith("github")) {
-      return this.providers.get("github");
-    }
-    if (clean.includes("gitlab.com") || clean.startsWith("gitlab")) {
-      return this.providers.get("gitlab");
-    }
-    if (clean.includes("bitbucket.org") || clean.startsWith("bitbucket")) {
-      return this.providers.get("bitbucket");
-    }
-    // Search custom registered hosts
+    const cloud = detectCloudProviderFromHost(host);
+    if (cloud) return this.providers.get(cloud);
+    const clean = normalizeHost(host);
     for (const provider of this.providers.values()) {
       if (provider.defaultHost.toLowerCase() === clean) {
         return provider;

@@ -77,7 +77,7 @@ const SECRET_PATTERNS: { type: string; description: string; regex: RegExp }[] = 
 
 const DANGEROUS_FILE_PATTERNS = [
   /^\.env(?:\..+)?$/i,
-  /^id_(?:rsa|ed25519|ecdsa|dsa)(?:\.pub)?$/i,
+  /^id_(?:rsa|ed25519|ecdsa|dsa)$/i,
   /\.(?:pem|key|pkcs12|pfx)$/i,
   /^(?:vault\.enc|accounts\.json)$/i,
 ];
@@ -146,8 +146,13 @@ export class SecretScanner {
     const violations: StagedSecretViolation[] = [];
 
     for (const file of staged) {
-      // Allow test files and test suites to define mock tokens/fixtures
-      if (/\.(?:test|spec)\.[jt]sx?$/i.test(file) || file.includes("/tests/") || file.startsWith("tests/")) {
+      // Allow unit/integration test source to define mock tokens; still scan .env under tests/.
+      const base = path.basename(file);
+      const segments = file.split(/[/\\]/);
+      if (/\.(?:test|spec)\.[jt]sx?$/i.test(base)) {
+        continue;
+      }
+      if (segments.includes("tests") && /\.[jt]sx?$/.test(base)) {
         continue;
       }
 

@@ -9,7 +9,7 @@ import { IdentityGuard } from "../safety/identity-guard";
 import { GitCli } from "./git-cli";
 import { RepoAccessDetector } from "../providers/repo-access-detector";
 import { logger } from "@/utils/logger";
-import { sanitizeSshKeyPath } from "@/utils/security";
+import { sanitizeSshKeyPath, isSafeGitExecutablePath, isSafeSshIdentityFile } from "@/utils/security";
 
 export interface ProxyExecutionResult {
   exitCode: number;
@@ -60,7 +60,14 @@ export class GitProxy {
         continue;
       }
 
-      if (arg.startsWith("--git-dir=") || arg.startsWith("--work-tree=")) {
+      if (arg.startsWith("--git-dir=")) {
+        const gitDir = arg.slice("--git-dir=".length);
+        const resolved = path.resolve(cwd, gitDir);
+        cwd = path.basename(resolved) === ".git" ? path.dirname(resolved) : resolved;
+        continue;
+      }
+      if (arg.startsWith("--work-tree=")) {
+        cwd = path.resolve(cwd, arg.slice("--work-tree=".length));
         continue;
       }
 
@@ -96,7 +103,16 @@ export class GitProxy {
     }
 
     // 2. Discover real git binary
-    const realGit = this.overrideManager.findRealGitPath() || (process.platform === "win32" ? "git.exe" : "/usr/bin/git");
+    const foundGit = this.overrideManager.findRealGitPath() || (process.platform === "win32" ? "git.exe" : "/usr/bin/git");
+    const envGit = process.env.GITBRIDGE_REAL_GIT;
+    const realGit =
+      envGit && isSafeGitExecutablePath(envGit) && fs.existsSync(envGit)
+        ? envGit
+        : isSafeGitExecutablePath(foundGit)
+          ? foundGit
+          : process.platform === "win32"
+            ? "git.exe"
+            : "/usr/bin/git";
     const { cwd, subcommand, subcmdIndex } = this.parseGitArgs(args);
 
     const isEnabled = this.store.isOverrideEnabled();
@@ -145,6 +161,10 @@ export class GitProxy {
             if (subcommand === "commit" && config.settings.commitIdentitySafety && ctx.isGitRepo) {
               const guardResult = await this.guard.check(cwd);
               if (!guardResult.allowed) {
+                if (guardResult.violations && guardResult.violations.length > 0) {
+                  logger.error(`\n[GitBridge Safety] Commit blocked: ${guardResult.message}`);
+                  return 1;
+                }
                 logger.warn(`\n[GitBridge Safety Warning] ${guardResult.message}`);
                 logger.warn(`Auto-applying verified GitBridge identity: ${pc.cyan(ctx.identity.name)} <${pc.cyan(ctx.identity.email)}>\n`);
               }
@@ -165,14 +185,23 @@ export class GitProxy {
               const targetPath = dest ? path.resolve(cwd, dest) : cwd;
               const detector = new RepoAccessDetector(this.store);
               const accessRes = await detector.detectAccess({ url: cloneUrl, targetPath });
-              if (accessRes.matched && accessRes.sshKeyPath && fs.existsSync(accessRes.sshKeyPath)) {
+              if (accessRes.matched && accessRes.sshKeyPath && fs.existsSync(accessRes.sshKeyPath) && isSafeSshIdentityFile(accessRes.sshKeyPath)) {
                 const safeKey = sanitizeSshKeyPath(accessRes.sshKeyPath);
                 injectedEnv.GIT_SSH_COMMAND = `ssh -i "${safeKey}" -o IdentitiesOnly=yes`;
               }
             }
           } else {
             const ctx = await this.resolver.resolve(cwd);
-            if (ctx.account && ctx.account.sshKeyPath && fs.existsSync(ctx.account.sshKeyPath)) {
+            if (subcommand === "push") {
+              const remoteViolations = await this.guard.getSecretScanner().scanRemotes(cwd);
+              if (remoteViolations.length > 0) {
+                logger.error(
+                  `\n[GitBridge Safety] Push blocked: Detected plaintext credentials embedded in Git remote URLs!`
+                );
+                return 1;
+              }
+            }
+            if (ctx.account && ctx.account.sshKeyPath && fs.existsSync(ctx.account.sshKeyPath) && isSafeSshIdentityFile(ctx.account.sshKeyPath)) {
               const safeKey = sanitizeSshKeyPath(ctx.account.sshKeyPath);
               injectedEnv.GIT_SSH_COMMAND = `ssh -i "${safeKey}" -o IdentitiesOnly=yes`;
             }

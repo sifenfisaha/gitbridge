@@ -7,7 +7,7 @@ import { SecretScanner, type StagedSecretViolation, type RemoteCredentialViolati
 import { StoreFactory } from "@/core/storage/store-factory";
 import { GitCli } from "@/core/git/git-cli";
 import { expandTilde, isWindows } from "@/utils/platform";
-import { redactSecret } from "@/utils/security";
+import { redactSecret, redactRemoteUrl } from "@/utils/security";
 
 export interface PermissionIssue {
   path: string;
@@ -169,9 +169,9 @@ export async function handleSecurityCheck(cwd: string = process.cwd(), store: Co
   // 2. Storage & Vault Security
   console.log(pc.bold("\n  2. Keyring & Vault Architecture"));
   const credStore = await StoreFactory.getStore(store.getPathResolver());
-  console.log(`     ${pc.green("✔")} Active Keyring Backend: ${pc.cyan(credStore.name)}`);
   const accounts = store.loadAccounts();
-  console.log(`     ${pc.green("✔")} Authenticated Accounts: ${pc.cyan(accounts.length.toString())} stored with hardware-bound entropy`);
+  console.log(`     ${pc.green("✔")} Active credential backend: ${pc.cyan(credStore.name)} (${accounts.length} account(s))`);
+  console.log(`     ${pc.gray("○ Vault fallback uses AES-256-GCM; key is a machine fingerprint, not a hardware secret.")}`);
 
   // 3. Staged Secrets & Private Keys
   console.log(pc.bold("\n  3. Staged Changes Secret Inspection"));
@@ -204,7 +204,7 @@ export async function handleSecurityCheck(cwd: string = process.cwd(), store: Co
       totalWarnings += remoteViolations.length;
       console.log(`     ${pc.yellow("⚠")} Detected plaintext credentials embedded in remote URLs:`);
       for (const rv of remoteViolations) {
-        console.log(`       • Remote '${pc.cyan(rv.name)}': ${pc.gray(rv.url)}`);
+        console.log(`       • Remote '${pc.cyan(rv.name)}': ${pc.gray(redactRemoteUrl(rv.url))}`);
       }
       console.log(`       Run '${pc.cyan("gb security fix")}' to automatically scrub credentials into Keyring.`);
     }
@@ -250,7 +250,7 @@ export async function handleSecurityCheck(cwd: string = process.cwd(), store: Co
 
   console.log(pc.gray("\n  ──────────────────────────────────────────────────"));
   if (totalWarnings === 0) {
-    console.log(pc.bold(pc.green("  ✔ Security status: Fort Knox (All 6 security layers passing!)\n")));
+    console.log(pc.bold(pc.green("  ✔ Security status: all local checks passed.\n")));
   } else {
     console.log(pc.bold(pc.yellow(`  ⚠ Security status: ${totalWarnings} recommendation(s) found. Run 'gb security fix' to auto-resolve.\n`)));
   }
@@ -296,7 +296,9 @@ export async function handleSecurityFix(cwd: string = process.cwd(), store: Conf
           const matchHost = cleanUrl.match(/^https?:\/\/([^/:]+)/i);
           const host = matchHost ? matchHost[1] : "git-remote";
           const user = rv.username || "token";
-          await credStore.set(host, user, rv.tokenOrPassword);
+          const existing = store.loadAccounts().find((a) => a.host === host && a.username === user);
+          const accountId = existing ? existing.id : `${host.replace(/[^a-zA-Z0-9]/g, "_")}_${user}`;
+          await credStore.set(host, accountId, rv.tokenOrPassword);
 
           console.log(`  ${pc.green("✔")} Scrubbed plaintext token from remote '${pc.cyan(rv.name)}' into secure Keyring.`);
         }

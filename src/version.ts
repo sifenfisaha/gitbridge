@@ -1,1 +1,1 @@
-export const GITBRIDGE_VERSION = "0.2.8";
+export const GITBRIDGE_VERSION = "0.2.9";

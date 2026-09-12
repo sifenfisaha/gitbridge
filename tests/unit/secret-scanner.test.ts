@@ -56,7 +56,7 @@ describe("SecretScanner Unit Tests", () => {
     expect(scanner.isDangerousFile(".env")).toBe(true);
     expect(scanner.isDangerousFile(".env.local")).toBe(true);
     expect(scanner.isDangerousFile("id_rsa")).toBe(true);
-    expect(scanner.isDangerousFile("id_ed25519.pub")).toBe(true);
+    expect(scanner.isDangerousFile("id_ed25519.pub")).toBe(false);
     expect(scanner.isDangerousFile("cert.pem")).toBe(true);
     expect(scanner.isDangerousFile("secret.key")).toBe(true);
     expect(scanner.isDangerousFile("vault.enc")).toBe(true);

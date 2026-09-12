@@ -317,7 +317,15 @@ describe("🌟 Complete End-to-End Test for All GitBridge Commands", () => {
     await handleSshList(store);
 
     const keyName = `test_key_${Date.now()}`;
-    await handleSshGenerate({ name: keyName, email: "ssh-test@domain.com" }, store);
+
+    // Temporarily disable TTY to prevent interactive passphrase prompt from hanging
+    const originalIsTTY = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: false, writable: true, configurable: true });
+    try {
+      await handleSshGenerate({ name: keyName, email: "ssh-test@domain.com" }, store);
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", { value: originalIsTTY, writable: true, configurable: true });
+    }
 
     // Link key to an account
     store.addAccount({

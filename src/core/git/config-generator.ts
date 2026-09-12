@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { ConfigStore } from "../config/config-store";
 import { expandTilde } from "@/utils/platform";
-import { sanitizeConfigString } from "@/utils/security";
+import { sanitizeConfigString, sanitizeGitConfigPath } from "@/utils/security";
 
 export class GitConfigGenerator {
   private store: ConfigStore;
@@ -51,12 +51,14 @@ export class GitConfigGenerator {
           const cleanHost = sanitizeConfigString(account.host);
           const cleanId = sanitizeConfigString(account.id);
           const aliasHost = `${cleanHost}-${cleanId}`;
-          ruleContent += `\n[url "git@${aliasHost}:"]\n`;
-          ruleContent += `    insteadOf = git@${cleanHost}:\n`;
-          if (account.sshPort && account.sshPort !== 22) {
-            ruleContent += `    insteadOf = ssh://git@${cleanHost}:${account.sshPort}/\n`;
+          if (/^[A-Za-z0-9._-]+$/.test(aliasHost) && /^[A-Za-z0-9._-]+$/.test(cleanHost)) {
+            ruleContent += `\n[url "git@${aliasHost}:"]\n`;
+            ruleContent += `    insteadOf = git@${cleanHost}:\n`;
+            if (account.sshPort && account.sshPort !== 22) {
+              ruleContent += `    insteadOf = ssh://git@${cleanHost}:${account.sshPort}/\n`;
+            }
+            ruleContent += `    insteadOf = ssh://git@${cleanHost}/\n`;
           }
-          ruleContent += `    insteadOf = ssh://git@${cleanHost}/\n`;
         }
       }
 
@@ -89,20 +91,25 @@ export class GitConfigGenerator {
 
     if (config.settings.credentialHelperEnabled) {
       mainContent += `# Git Credential Helper Bridge\n`;
+      mainContent += `# "!" runs a shell snippet so Git invokes: gitbridge credential <get|store|erase>\n`;
       mainContent += `[credential]\n`;
-      mainContent += `    helper = gitbridge credential\n\n`;
+      mainContent += `    helper = !gitbridge credential\n\n`;
     }
 
     if (config.rules.length > 0) {
       mainContent += `# Directory-Based Conditional Includes\n`;
       for (const rule of config.rules) {
         const ruleFile = paths.getRuleGitConfigFile(rule.id);
-        const cleanRulePath = sanitizeConfigString(rule.path);
+        const cleanRulePath = sanitizeGitConfigPath(rule.path);
         const expandedRulePath = expandTilde(cleanRulePath);
+        if (!expandedRulePath || /["[\]]/.test(expandedRulePath)) {
+          continue;
+        }
         // gitdir format requires trailing slash for directories
         const gitDirPattern = expandedRulePath.endsWith("/") ? `${expandedRulePath}**` : `${expandedRulePath}/**`;
+        const quotedRuleFile = ruleFile.replace(/\\/g, "/");
         mainContent += `[includeIf "gitdir:${gitDirPattern}"]\n`;
-        mainContent += `    path = ${ruleFile}\n\n`;
+        mainContent += `    path = ${quotedRuleFile}\n\n`;
       }
     }
 

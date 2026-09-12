@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { ConfigStore } from "../config/config-store";
 import { expandTilde } from "@/utils/platform";
-import { sanitizeConfigString } from "@/utils/security";
+import { sanitizeConfigString, isSafeSshHostToken, isSafeSshIdentityFile } from "@/utils/security";
 
 export class SshConfigGenerator {
   private store: ConfigStore;
@@ -30,6 +30,9 @@ export class SshConfigGenerator {
         const cleanId = sanitizeConfigString(account.id);
         const hostAlias = `${cleanHost}-${cleanId}`;
         const keyPath = sanitizeConfigString(expandTilde(account.sshKeyPath!));
+        if (!isSafeSshHostToken(cleanHost) || !isSafeSshHostToken(cleanId) || !isSafeSshIdentityFile(keyPath)) {
+          continue;
+        }
         const cleanUser = "git";
         const displayName = sanitizeConfigString(account.displayName || account.username);
 

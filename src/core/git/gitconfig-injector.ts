@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ConfigStore } from "../config/config-store";
 import { GitConfigGenerator } from "./config-generator";
+import { replaceManagedBlock, removeManagedBlock } from "@/utils/managed-block";
 
 export const GITCONFIG_BLOCK_START = "# --- BEGIN GITBRIDGE MANAGED BLOCK ---";
 export const GITCONFIG_BLOCK_END = "# --- END GITBRIDGE MANAGED BLOCK ---";
@@ -63,13 +64,13 @@ export class GitConfigInjector {
 
     let newContent: string;
 
-    if (originalContent.includes(GITCONFIG_BLOCK_START) && originalContent.includes(GITCONFIG_BLOCK_END)) {
-      // Replace existing block
-      const before = originalContent.substring(0, originalContent.indexOf(GITCONFIG_BLOCK_START));
-      const after = originalContent.substring(originalContent.indexOf(GITCONFIG_BLOCK_END) + GITCONFIG_BLOCK_END.length);
-      newContent = `${before.trimEnd()}\n\n${blockContent}\n\n${after.trimStart()}`.trim() + "\n";
+    if (originalContent.includes(GITCONFIG_BLOCK_START)) {
+      const replaced = replaceManagedBlock(originalContent, GITCONFIG_BLOCK_START, GITCONFIG_BLOCK_END, `${blockContent}\n`);
+      if (!replaced.ok || replaced.content === undefined) {
+        return { success: false, backupPath };
+      }
+      newContent = replaced.content;
     } else {
-      // Append block
       newContent = `${originalContent.trimEnd()}\n\n${blockContent}\n`.trimStart();
     }
 
@@ -84,16 +85,11 @@ export class GitConfigInjector {
     const originalContent = fs.readFileSync(gitConfigFile, "utf-8");
     if (!originalContent.includes(GITCONFIG_BLOCK_START)) return true;
 
-    const before = originalContent.substring(0, originalContent.indexOf(GITCONFIG_BLOCK_START));
-    const after = originalContent.substring(originalContent.indexOf(GITCONFIG_BLOCK_END) + GITCONFIG_BLOCK_END.length);
-    const cleaned = `${before.trimEnd()}\n${after.trimStart()}`.trim();
-
-    if (cleaned.length === 0) {
-      // If the file only contained the GitBridge block, we can either empty it or remove it
-      fs.writeFileSync(gitConfigFile, "", { encoding: "utf-8", mode: 0o644 });
-    } else {
-      fs.writeFileSync(gitConfigFile, `${cleaned}\n`, { encoding: "utf-8", mode: 0o644 });
+    const removed = removeManagedBlock(originalContent, GITCONFIG_BLOCK_START, GITCONFIG_BLOCK_END);
+    if (!removed.ok || removed.content === undefined) {
+      return false;
     }
+    fs.writeFileSync(gitConfigFile, removed.content, { encoding: "utf-8", mode: 0o644 });
 
     return true;
   }

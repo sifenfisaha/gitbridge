@@ -72,14 +72,18 @@ export async function handleSetupCommand(options: SetupOptions = {}, store: Conf
 
     // Configure identity if not already created
     if (store.loadIdentities().length === 0) {
-      const name = discovery.existingGitUser?.name || "Fuad Tesfaye";
-      const email = discovery.existingGitUser?.email || "user@example.com";
-      store.addIdentity({
-        id: "personal",
-        name,
-        email,
-        isDefault: true,
-      });
+      const name = discovery.existingGitUser?.name;
+      const email = discovery.existingGitUser?.email;
+      if (name && email) {
+        store.addIdentity({
+          id: "personal",
+          name,
+          email,
+          isDefault: true,
+        });
+      } else {
+        logger.warn("No existing Git user.name/user.email found. Run 'gb id add' before committing.");
+      }
     }
 
     await handleEnableCommand(store);

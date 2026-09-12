@@ -6,6 +6,7 @@ import { ProviderDetector } from "./provider-detector";
 import { parseRemoteUrl, type ParsedRemoteUrl } from "../git/url-parser";
 import { StoreFactory } from "../storage/store-factory";
 import { expandTilde } from "@/utils/platform";
+import { hostsEqual } from "@/utils/hosts";
 import type { GitIdentity, ProviderAccount, GitProviderType, DirectoryRule } from "../config/schema";
 
 export type AccessDetectionTier =
@@ -141,9 +142,9 @@ export class RepoAccessDetector {
     const providerId = detection.providerId;
     const host = detection.host;
 
-    // Filter candidate accounts matching this provider / host
+    // Filter candidate accounts matching this provider / host (exact host, never substring)
     const providerAccounts = accounts.filter(
-      (a) => a.providerId === providerId || a.host === host || host.includes(a.host)
+      (a) => a.providerId === providerId || hostsEqual(a.host, host)
     );
 
     if (providerAccounts.length === 0) {
@@ -216,33 +217,41 @@ export class RepoAccessDetector {
       const provider = defaultProviderRegistry.get(providerId);
 
       if (provider && typeof provider.checkRepoAccess === "function") {
+        const writeMatches: ProviderAccount[] = [];
+        let writePermission: string | undefined;
         for (const acc of providerAccounts) {
           try {
             const token = await credStore.get(acc.host, acc.id);
             if (token) {
               const accessRes = await provider.checkRepoAccess(token, parsed.owner, parsed.repo, acc.host);
-              if (accessRes.hasAccess) {
-                const id = this.resolveIdentityForAccount(acc, identities);
-                return {
-                  matched: true,
-                  tier: "token_api",
-                  account: acc,
-                  accountId: acc.id,
-                  identity: id.identity,
-                  identityId: id.identity?.id,
-                  email: id.identity?.email || acc.email,
-                  name: id.identity?.name || acc.displayName,
-                  providerId,
-                  host: acc.host,
-                  sshKeyPath: acc.sshKeyPath,
-                  reason: `Verified provider API access for account '${acc.username}' (permission: ${accessRes.permission || "read"})`,
-                  parsedUrl: parsed,
-                };
+              // Public-repo read access is not ownership. Require write/admin.
+              if (accessRes.hasAccess && (accessRes.permission === "write" || accessRes.permission === "admin")) {
+                writeMatches.push(acc);
+                writePermission = accessRes.permission;
               }
             }
           } catch {
             // Continue probing next account
           }
+        }
+        if (writeMatches.length === 1) {
+          const acc = writeMatches[0];
+          const id = this.resolveIdentityForAccount(acc, identities);
+          return {
+            matched: true,
+            tier: "token_api",
+            account: acc,
+            accountId: acc.id,
+            identity: id.identity,
+            identityId: id.identity?.id,
+            email: id.identity?.email || acc.email,
+            name: id.identity?.name || acc.displayName,
+            providerId,
+            host: acc.host,
+            sshKeyPath: acc.sshKeyPath,
+            reason: `Verified provider API write access for account '${acc.username}' (permission: ${writePermission || "write"})`,
+            parsedUrl: parsed,
+          };
         }
       }
     } catch {
@@ -347,10 +356,6 @@ export class RepoAccessDetector {
         createdAt: new Date().toISOString(),
       };
       return { identity: synthesized, synthesized: true };
-    }
-
-    if (identities.length > 0) {
-      return { identity: identities[0], synthesized: false };
     }
 
     return { synthesized: false };

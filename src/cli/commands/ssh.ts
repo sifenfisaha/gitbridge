@@ -9,6 +9,8 @@ import { promptSelect, promptText, promptConfirm } from "../ui/prompts";
 import { execProcess } from "@/utils/proc";
 import { logger } from "@/utils/logger";
 import { getHomeDir } from "@/utils/platform";
+import { isSafeSshKeyBasename, isSafeSshIdentityFile, sanitizeSshKeyPath } from "@/utils/security";
+import { promptPassword } from "../ui/prompts";
 
 export async function handleSshList(store: ConfigStore = defaultConfigStore) {
   const keys = SshKeyDetector.listAvailableKeys();
@@ -63,10 +65,20 @@ export async function handleSshGenerate(
     (await promptText({
       message: "Enter name for the new SSH key (e.g. id_ed25519_company, id_work):",
       defaultValue: "id_ed25519_gitbridge",
-      validate: (v) => (!v.trim() ? "Key name cannot be empty." : undefined),
+      validate: (v) => (!isSafeSshKeyBasename(v.trim()) ? "Use only letters, numbers, dots, underscores, or hyphens." : undefined),
     }));
 
+  if (!isSafeSshKeyBasename(keyName.trim())) {
+    logger.error("Key name must be a simple filename (no path separators).");
+    return;
+  }
+
   const targetPath = path.join(sshDir, keyName.trim());
+  const resolved = path.resolve(targetPath);
+  if (!resolved.startsWith(path.resolve(sshDir) + path.sep) && resolved !== path.resolve(sshDir)) {
+    logger.error("Refusing to write SSH key outside ~/.ssh.");
+    return;
+  }
   if (fs.existsSync(targetPath)) {
     logger.error(`File '${targetPath}' already exists. Please choose a different name.`);
     return;
@@ -81,8 +93,25 @@ export async function handleSshGenerate(
         : "",
     }));
 
+  let passphrase = "";
+  if (process.stdin.isTTY) {
+    passphrase = await promptPassword({
+      message: "Enter passphrase for the new key (empty for none — not recommended):",
+    });
+    if (!passphrase) {
+      const ok = await promptConfirm({
+        message: "Create a passphrase-less key? Anyone with the file can use it.",
+        initialValue: false,
+      });
+      if (!ok) {
+        logger.warn("SSH key generation cancelled.");
+        return;
+      }
+    }
+  }
+
   console.log(pc.cyan(`\nGenerating ed25519 SSH key at ${targetPath}...`));
-  const res = await execProcess("ssh-keygen", ["-t", "ed25519", "-C", comment, "-f", targetPath, "-N", ""]);
+  const res = await execProcess("ssh-keygen", ["-t", "ed25519", "-C", comment, "-f", targetPath, "-N", passphrase]);
 
   if (res.exitCode !== 0) {
     logger.error(`ssh-keygen failed: ${res.stderr || res.stdout}`);
@@ -143,7 +172,11 @@ export async function handleSshLink(
     return;
   }
 
-  let selectedKeyPath = keyPathArg;
+  let selectedKeyPath = keyPathArg ? sanitizeSshKeyPath(keyPathArg) : undefined;
+  if (selectedKeyPath && !isSafeSshIdentityFile(selectedKeyPath)) {
+    logger.error("Refusing unsafe SSH key path.");
+    return;
+  }
   if (!selectedKeyPath) {
     selectedKeyPath = await promptSelect({
       message: "Select SSH key to link:",

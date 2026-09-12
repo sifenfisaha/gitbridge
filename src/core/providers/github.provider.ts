@@ -10,7 +10,10 @@ import type {
 import { requestJson } from "@/utils/http";
 import { ProviderError } from "@/utils/errors";
 
-const GITHUB_CLIENT_ID = process.env.GITBRIDGE_GITHUB_CLIENT_ID || "Iv1.b507a08c87ecfe98";
+function githubOAuthClientId(): string | undefined {
+  const id = process.env.GITBRIDGE_GITHUB_CLIENT_ID?.trim();
+  return id || undefined;
+}
 
 export class GitHubProvider implements GitProvider {
   readonly id = "github" as const;
@@ -163,6 +166,13 @@ export class GitHubProvider implements GitProvider {
   }
 
   async startDeviceFlow(): Promise<DeviceCodeResponse> {
+    const clientId = githubOAuthClientId();
+    if (!clientId) {
+      throw new ProviderError(
+        "GitHub device login requires GITBRIDGE_GITHUB_CLIENT_ID (register your own GitHub OAuth/GitHub App). Use a Personal Access Token instead.",
+        this.name
+      );
+    }
     const res = await requestJson<{
       device_code: string;
       user_code: string;
@@ -171,7 +181,7 @@ export class GitHubProvider implements GitProvider {
       interval: number;
       error?: string;
     }>("https://github.com/login/device/code", "POST", {
-      client_id: GITHUB_CLIENT_ID,
+      client_id: clientId,
       scope: "repo,read:user,user:email",
     });
 
@@ -189,6 +199,13 @@ export class GitHubProvider implements GitProvider {
   }
 
   async pollDeviceFlow(deviceCode: string, interval = 5): Promise<{ token: string }> {
+    const clientId = githubOAuthClientId();
+    if (!clientId) {
+      throw new ProviderError(
+        "GitHub device login requires GITBRIDGE_GITHUB_CLIENT_ID. Use a Personal Access Token instead.",
+        this.name
+      );
+    }
     const pollIntervalMs = (interval + 1) * 1000;
     const maxAttempts = 60;
 
@@ -200,7 +217,7 @@ export class GitHubProvider implements GitProvider {
         error?: string;
         error_description?: string;
       }>("https://github.com/login/oauth/access_token", "POST", {
-        client_id: GITHUB_CLIENT_ID,
+        client_id: clientId,
         device_code: deviceCode,
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
       });

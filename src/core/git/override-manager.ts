@@ -118,6 +118,13 @@ export class GitOverrideManager {
         ? "git.exe"
         : "/usr/bin/git";
     const quotedUnixGit = unixSingleQuote(realGit);
+    // The directory this shim is generated for. The CLI resolves its config dir
+    // as GITBRIDGE_HOME, then XDG_CONFIG_HOME/gitbridge, then ~/.gitbridge; the
+    // shims mirror that at runtime and fall back to this directory, so an
+    // XDG_CONFIG_HOME user does not end up with a shim that never finds
+    // override.active and silently bypasses every guard.
+    const baseDir = this.store.getPathResolver().getBaseDir();
+    const quotedUnixBaseDir = unixSingleQuote(baseDir);
 
     if (!fs.existsSync(shimsDir)) {
       fs.mkdirSync(shimsDir, { recursive: true, mode: 0o755 });
@@ -138,7 +145,15 @@ if [ "\${GITBRIDGE_OVERRIDE_BYPASS:-}" = "1" ]; then
     exec "\$REAL_GIT" "\$@"
 fi
 
-GB_CONFIG_DIR="\${GITBRIDGE_HOME:-$HOME/.gitbridge}"
+# Resolve the GitBridge config dir the same way the CLI does:
+# GITBRIDGE_HOME, then XDG_CONFIG_HOME/gitbridge, then the directory this shim was generated for.
+if [ -n "\${GITBRIDGE_HOME:-}" ]; then
+    GB_CONFIG_DIR="$GITBRIDGE_HOME"
+elif [ -n "\${XDG_CONFIG_HOME:-}" ]; then
+    GB_CONFIG_DIR="$XDG_CONFIG_HOME/gitbridge"
+else
+    GB_CONFIG_DIR=${quotedUnixBaseDir}
+fi
 if [ ! -f "$GB_CONFIG_DIR/override.active" ]; then
     exec "$REAL_GIT" "$@"
 fi
@@ -173,8 +188,10 @@ fi
 rem GitBridge Git Override Shim for Windows CMD
 if "%GITBRIDGE_OVERRIDE_BYPASS%"=="1" goto bypass
 
+rem Resolve the config dir like the CLI: GITBRIDGE_HOME, then XDG_CONFIG_HOME\\gitbridge, then the directory this shim was generated for
 set "GB_CONFIG_DIR=%GITBRIDGE_HOME%"
-if "%GB_CONFIG_DIR%"=="" set "GB_CONFIG_DIR=%USERPROFILE%\\.gitbridge"
+if "%GB_CONFIG_DIR%"=="" if not "%XDG_CONFIG_HOME%"=="" set "GB_CONFIG_DIR=%XDG_CONFIG_HOME%\\gitbridge"
+if "%GB_CONFIG_DIR%"=="" set "GB_CONFIG_DIR=${baseDir}"
 if not exist "%GB_CONFIG_DIR%\\override.active" goto bypass
 
 where gitbridge >nul 2>&1
@@ -217,7 +234,8 @@ if ($env:GITBRIDGE_OVERRIDE_BYPASS -eq "1") {
     exit $LASTEXITCODE
 }
 
-$configDir = if ($env:GITBRIDGE_HOME) { $env:GITBRIDGE_HOME } else { "$HOME/.gitbridge" }
+# Resolve the config dir like the CLI: GITBRIDGE_HOME, then XDG_CONFIG_HOME/gitbridge, then the directory this shim was generated for
+$configDir = if ($env:GITBRIDGE_HOME) { $env:GITBRIDGE_HOME } elseif ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'gitbridge' } else { '${baseDir.replace(/'/g, "''")}' }
 if (-not (Test-Path "$configDir/override.active")) {
     & $realGit @args
     exit $LASTEXITCODE

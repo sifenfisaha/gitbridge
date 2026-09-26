@@ -58,14 +58,22 @@ describe("GitOverrideManager", () => {
     expect(unixContent).toContain("#!/usr/bin/env bash");
     expect(unixContent).toContain("GITBRIDGE_OVERRIDE_BYPASS");
     expect(unixContent).toContain("git-proxy");
+    // Config dir resolution mirrors PathResolver: env vars first, then the generated-for dir
+    expect(unixContent).toContain("XDG_CONFIG_HOME");
+    expect(unixContent).toContain(store.getPathResolver().getBaseDir());
+    expect(unixContent).not.toContain("$HOME/.gitbridge");
 
     const cmdContent = fs.readFileSync(cmdShim, "utf-8");
     expect(cmdContent).toContain("@echo off");
     expect(cmdContent).toContain("git-proxy");
+    expect(cmdContent).toContain("XDG_CONFIG_HOME");
+    expect(cmdContent).toContain(store.getPathResolver().getBaseDir());
 
     const psContent = fs.readFileSync(psShim, "utf-8");
     expect(psContent).toContain("GITBRIDGE_OVERRIDE_BYPASS");
     expect(psContent).toContain("git-proxy");
+    expect(psContent).toContain("XDG_CONFIG_HOME");
+    expect(psContent).toContain(store.getPathResolver().getBaseDir());
   });
 
   it("uninstalls shims cleanly", () => {

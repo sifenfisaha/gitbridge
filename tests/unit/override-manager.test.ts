@@ -21,7 +21,7 @@ describe("GitOverrideManager", () => {
     testHomeDir = path.join(tempDir, "mock-home");
     fs.mkdirSync(testHomeDir, { recursive: true });
 
-    const paths = new PathResolver(path.join(testHomeDir, ".gitbridge"));
+    const paths = new PathResolver(path.join(testHomeDir, ".gitbridge"), testHomeDir);
     store = new ConfigStore(paths);
     manager = new GitOverrideManager(store);
   });
@@ -121,6 +121,9 @@ describe("GitOverrideManager", () => {
   });
 
   it("tracks complete override status accurately", () => {
+    const bashrc = path.join(testHomeDir, ".bashrc");
+    fs.writeFileSync(bashrc, "# existing user config\n");
+
     const statusBefore = manager.getOverrideStatus();
     expect(statusBefore.enabled).toBe(false);
     expect(statusBefore.shimsInstalled).toBe(false);
@@ -132,7 +135,13 @@ describe("GitOverrideManager", () => {
     expect(statusAfter.shimsInstalled).toBe(true);
     expect(statusAfter.realGitPath).not.toBeNull();
 
+    // Shell profiles are written inside the sandbox home, never the real one
+    expect(statusAfter.modifiedShellFiles).toContain(bashrc);
+    expect(fs.readFileSync(bashrc, "utf-8")).toContain(OVERRIDE_BLOCK_START);
+
     manager.disable();
+    expect(fs.readFileSync(bashrc, "utf-8")).not.toContain(OVERRIDE_BLOCK_START);
+    expect(fs.readFileSync(bashrc, "utf-8")).toContain("# existing user config");
     const statusDisabled = manager.getOverrideStatus();
     expect(statusDisabled.enabled).toBe(false);
     expect(statusDisabled.shimsInstalled).toBe(false);

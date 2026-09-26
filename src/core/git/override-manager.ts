@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { ConfigStore, defaultConfigStore } from "../config/config-store";
-import { getHomeDir, collapseTilde, expandTilde } from "@/utils/platform";
+import { collapseTilde } from "@/utils/platform";
 import { isSafeGitExecutablePath, unixSingleQuote } from "@/utils/security";
 import { replaceManagedBlock, removeManagedBlock } from "@/utils/managed-block";
 
@@ -272,7 +272,9 @@ if (Get-Command gitbridge -ErrorAction SilentlyContinue) {
    * Returns list of shell configuration files to check / inject based on platform and environment.
    */
   getShellTargets(): ShellTarget[] {
-    const home = getHomeDir();
+    const paths = this.store.getPathResolver();
+    const home = paths.getHomeDir();
+    const configDir = paths.getUserConfigDir();
     const targets: ShellTarget[] = [];
 
     // Bash & POSIX profiles
@@ -297,8 +299,8 @@ if (Get-Command gitbridge -ErrorAction SilentlyContinue) {
     }
 
     // Fish shell
-    const fishConfig = path.join(home, ".config", "fish", "config.fish");
-    if (fs.existsSync(fishConfig) || fs.existsSync(path.join(home, ".config", "fish"))) {
+    const fishConfig = path.join(configDir, "fish", "config.fish");
+    if (fs.existsSync(fishConfig) || fs.existsSync(path.join(configDir, "fish"))) {
       targets.push({ path: fishConfig, type: "fish" });
     }
 
@@ -309,7 +311,7 @@ if (Get-Command gitbridge -ErrorAction SilentlyContinue) {
       psProfiles.push(path.join(docs, "PowerShell", "Microsoft.PowerShell_profile.ps1"));
       psProfiles.push(path.join(docs, "WindowsPowerShell", "Microsoft.PowerShell_profile.ps1"));
     }
-    psProfiles.push(path.join(home, ".config", "powershell", "Microsoft.PowerShell_profile.ps1"));
+    psProfiles.push(path.join(configDir, "powershell", "Microsoft.PowerShell_profile.ps1"));
 
     for (const psPath of psProfiles) {
       if (fs.existsSync(psPath) || fs.existsSync(path.dirname(psPath))) {

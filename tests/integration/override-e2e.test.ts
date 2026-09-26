@@ -20,7 +20,7 @@ describe("Git Override End-to-End Integration", () => {
     workDir = path.join(tempDir, "work-projects", "api-service");
     fs.mkdirSync(workDir, { recursive: true });
 
-    const paths = new PathResolver(path.join(tempDir, ".gitbridge"));
+    const paths = new PathResolver(path.join(tempDir, ".gitbridge"), tempDir);
     store = new ConfigStore(paths);
     overrideManager = new GitOverrideManager(store);
     proxy = new GitProxy(store);
